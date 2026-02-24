@@ -47,6 +47,10 @@ func (c *Client) doRequest(method, path string, params url.Values) ([]byte, erro
 }
 
 func (c *Client) doRequestWithBody(method, path string, params url.Values, body interface{}) ([]byte, error) {
+	return c.doRequestWithBodyAndHeaders(method, path, params, body, nil)
+}
+
+func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Values, body interface{}, extraHeaders map[string]string) ([]byte, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse URL")
@@ -73,6 +77,10 @@ func (c *Client) doRequestWithBody(method, path string, params url.Values, body 
 	req.Header.Set("Authorization", "Token token="+c.apiToken)
 	req.Header.Set("Accept", "application/vnd.pagerduty+json;version="+apiVersion)
 	req.Header.Set("Content-Type", "application/json")
+
+	for key, value := range extraHeaders {
+		req.Header.Set(key, value)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -226,6 +234,95 @@ func (c *Client) CreateIncident(title, description, serviceID string, assigneeID
 	var response CreateIncidentResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal create incident response")
+	}
+
+	return &response, nil
+}
+
+// GetIncidents retrieves incidents from PagerDuty filtered by statuses
+func (c *Client) GetIncidents(statuses []string, limit, offset int) (*IncidentsResponse, error) {
+	params := url.Values{}
+	params.Set("limit", fmt.Sprintf("%d", limit))
+	params.Set("offset", fmt.Sprintf("%d", offset))
+	params.Set("sort_by", "created_at:desc")
+	for _, status := range statuses {
+		params.Add("statuses[]", status)
+	}
+
+	body, err := c.doRequest("GET", "/incidents", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var response IncidentsResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal incidents response")
+	}
+
+	return &response, nil
+}
+
+// UpdateIncident updates an incident's status (acknowledge, resolve)
+func (c *Client) UpdateIncident(incidentID, status, fromEmail string) (*IncidentResponse, error) {
+	request := UpdateIncidentRequest{
+		Incident: UpdateIncidentBody{
+			Type:   "incident_reference",
+			Status: status,
+		},
+	}
+
+	headers := map[string]string{
+		"From": fromEmail,
+	}
+
+	body, err := c.doRequestWithBodyAndHeaders("PUT", fmt.Sprintf("/incidents/%s", incidentID), nil, request, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	var response IncidentResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal update incident response")
+	}
+
+	return &response, nil
+}
+
+// GetIncidentNotes retrieves notes for a specific incident
+func (c *Client) GetIncidentNotes(incidentID string) (*IncidentNotesResponse, error) {
+	body, err := c.doRequest("GET", fmt.Sprintf("/incidents/%s/notes", incidentID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response IncidentNotesResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal incident notes response")
+	}
+
+	return &response, nil
+}
+
+// CreateIncidentNote creates a note on an incident
+func (c *Client) CreateIncidentNote(incidentID, content, fromEmail string) (*CreateIncidentNoteResponse, error) {
+	request := CreateIncidentNoteRequest{
+		Note: CreateIncidentNoteBody{
+			Content: content,
+		},
+	}
+
+	headers := map[string]string{
+		"From": fromEmail,
+	}
+
+	body, err := c.doRequestWithBodyAndHeaders("POST", fmt.Sprintf("/incidents/%s/notes", incidentID), nil, request, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	var response CreateIncidentNoteResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal create incident note response")
 	}
 
 	return &response, nil

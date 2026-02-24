@@ -105,6 +105,76 @@ export class Client {
 
         return response.json();
     }
+
+    async getIncidents() {
+        const response = await fetch(`${this.baseUrl}/incidents`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to fetch incidents');
+        }
+
+        return response.json();
+    }
+
+    async updateIncident(incidentId: string, status: string) {
+        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({status}),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to update incident');
+        }
+
+        return response.json();
+    }
+
+    async getIncidentNotes(incidentId: string) {
+        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}/notes`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to fetch incident notes');
+        }
+
+        return response.json();
+    }
+
+    async createIncidentNote(incidentId: string, content: string) {
+        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}/notes`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({content}),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to create incident note');
+        }
+
+        return response.json();
+    }
 }
 
 const client = new Client();

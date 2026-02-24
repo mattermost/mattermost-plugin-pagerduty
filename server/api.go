@@ -22,7 +22,11 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	apiRouter.HandleFunc("/oncalls", p.handleGetOnCalls).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/schedule", p.handleGetScheduleDetails).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/services", p.handleGetServices).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/incidents", p.handleGetIncidents).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/incidents", p.handleCreateIncident).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/incidents/{id}", p.handleUpdateIncident).Methods(http.MethodPut)
+	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleGetIncidentNotes).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleCreateIncidentNote).Methods(http.MethodPost)
 
 	router.ServeHTTP(w, r)
 }

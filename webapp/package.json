@@ -101,6 +101,8 @@
       "^.+\\.(css|less|scss)$": "identity-obj-proxy",
       "^.*i18n.*\\.(json)$": "<rootDir>/tests/i18n_mock.json",
       "^bundle-loader\\?lazy\\!(.*)$": "$1",
+      "^@/manifest$": "<rootDir>/tests/manifest_mock.json",
+      "^.*/manifest$": "<rootDir>/tests/manifest_mock.json",
       "^@/(.*)$": "<rootDir>/src/$1"
     },
     "moduleDirectories": [

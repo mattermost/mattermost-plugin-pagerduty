@@ -36,6 +36,12 @@ export const mockClient = {
     getSchedules: jest.fn(),
     getOnCalls: jest.fn(),
     getScheduleDetails: jest.fn(),
+    getServices: jest.fn(),
+    createIncident: jest.fn(),
+    getIncidents: jest.fn(),
+    updateIncident: jest.fn(),
+    getIncidentNotes: jest.fn(),
+    createIncidentNote: jest.fn(),
 };
 
 // Reset all mocks

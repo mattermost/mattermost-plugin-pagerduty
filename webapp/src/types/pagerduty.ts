@@ -113,6 +113,7 @@ export interface ServicesResponse extends ListResponse {
 export interface ServiceReference {
     id: string;
     type: string;
+    summary?: string;
 }
 
 export interface AssigneeReference {
@@ -124,6 +125,12 @@ export interface Assignment {
     assignee: AssigneeReference;
 }
 
+export interface Priority {
+    id: string;
+    name: string;
+    summary: string;
+}
+
 export interface Incident {
     id: string;
     type: string;
@@ -132,6 +139,8 @@ export interface Incident {
     service: ServiceReference;
     assignments?: Assignment[];
     status?: string;
+    urgency?: string;
+    priority?: Priority | null;
     created_at?: string;
     incident_key?: string;
     html_url?: string;
@@ -146,4 +155,27 @@ export interface CreateIncidentRequest {
 
 export interface CreateIncidentResponse {
     incident: Incident;
+}
+
+export interface IncidentsResponse extends ListResponse {
+    incidents: Incident[];
+}
+
+export interface IncidentResponse {
+    incident: Incident;
+}
+
+export interface IncidentNote {
+    id: string;
+    content: string;
+    created_at: string;
+    user: UserReference;
+}
+
+export interface IncidentNotesResponse {
+    notes: IncidentNote[];
+}
+
+export interface CreateIncidentNoteResponse {
+    note: IncidentNote;
 }

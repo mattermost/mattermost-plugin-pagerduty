@@ -161,4 +161,133 @@ describe('Client', () => {
             await expect(client.getScheduleDetails('')).rejects.toThrow('Schedule ID is required');
         });
     });
+
+    describe('getIncidents', () => {
+        it('should fetch incidents successfully', async () => {
+            const mockIncidents = {
+                incidents: [
+                    {id: 'INC1', title: 'Server Down', status: 'triggered'},
+                ],
+            };
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockIncidents,
+            });
+
+            const result = await client.getIncidents();
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            expect(result).toEqual(mockIncidents);
+        });
+
+        it('should throw error on failed response', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                json: async () => ({message: 'Failed to retrieve incidents'}),
+            });
+
+            await expect(client.getIncidents()).rejects.toThrow('Failed to retrieve incidents');
+        });
+    });
+
+    describe('updateIncident', () => {
+        it('should update incident status successfully', async () => {
+            const mockResponse = {
+                incident: {id: 'INC1', status: 'acknowledged'},
+            };
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockResponse,
+            });
+
+            const result = await client.updateIncident('INC1', 'acknowledged');
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({status: 'acknowledged'}),
+            });
+            expect(result).toEqual(mockResponse);
+        });
+
+        it('should throw error on failed response', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                json: async () => ({message: 'Failed to update incident'}),
+            });
+
+            await expect(client.updateIncident('INC1', 'acknowledged')).rejects.toThrow('Failed to update incident');
+        });
+    });
+
+    describe('getIncidentNotes', () => {
+        it('should fetch incident notes successfully', async () => {
+            const mockNotes = {
+                notes: [
+                    {id: 'N1', content: 'Investigating', created_at: '2024-01-01T00:00:00Z', user: {id: 'U1', summary: 'John'}},
+                ],
+            };
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockNotes,
+            });
+
+            const result = await client.getIncidentNotes('INC1');
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            expect(result).toEqual(mockNotes);
+        });
+    });
+
+    describe('createIncidentNote', () => {
+        it('should create incident note successfully', async () => {
+            const mockResponse = {
+                note: {id: 'N1', content: 'Root cause identified', created_at: '2024-01-01T00:00:00Z', user: {id: 'U1', summary: 'John'}},
+            };
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockResponse,
+            });
+
+            const result = await client.createIncidentNote('INC1', 'Root cause identified');
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({content: 'Root cause identified'}),
+            });
+            expect(result).toEqual(mockResponse);
+        });
+
+        it('should throw error on failed response', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                json: async () => ({message: 'Failed to create incident note'}),
+            });
+
+            await expect(client.createIncidentNote('INC1', 'note')).rejects.toThrow('Failed to create incident note');
+        });
+    });
 });
