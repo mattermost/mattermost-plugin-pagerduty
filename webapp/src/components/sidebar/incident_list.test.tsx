@@ -37,6 +37,11 @@ describe('IncidentList', () => {
         onIncidentClick: jest.fn(),
         onAcknowledge: jest.fn().mockResolvedValue(undefined),
         onResolve: jest.fn().mockResolvedValue(undefined),
+        schedules: [],
+        users: [],
+        filters: {},
+        onFiltersChange: jest.fn(),
+        userScheduleMap: {},
     };
 
     beforeEach(() => {

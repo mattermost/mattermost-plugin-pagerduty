@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -277,7 +278,45 @@ func (p *Plugin) handleGetIncidents(w http.ResponseWriter, r *http.Request) {
 
 	statuses := []string{"triggered", "acknowledged"}
 
-	incidents, err := pdClient.GetIncidents(statuses, 100, 0)
+	// Parse optional user_ids filter (comma-separated)
+	var userIDs []string
+	if rawUserIDs := r.URL.Query().Get("user_ids"); rawUserIDs != "" {
+		userIDs = strings.Split(rawUserIDs, ",")
+	}
+
+	// Parse optional schedule_id filter — resolve to on-call user IDs
+	if scheduleID := r.URL.Query().Get("schedule_id"); scheduleID != "" {
+		p.client.Log.Debug("Resolving schedule to on-call users for incident filter", "schedule_id", scheduleID)
+		oncalls, err := pdClient.GetOnCallsForSchedule(scheduleID)
+		if err != nil {
+			p.client.Log.Error("Failed to resolve schedule on-calls for filtering", "error", err.Error(), "schedule_id", scheduleID)
+			p.handleError(w, r, &APIError{
+				ID:         "api.pagerduty.incidents.schedule.error",
+				Message:    "Failed to resolve schedule for filtering",
+				StatusCode: http.StatusInternalServerError,
+			})
+			return
+		}
+
+		scheduleUserIDs := extractUserIDsFromOnCalls(oncalls.OnCalls)
+		if len(userIDs) > 0 {
+			userIDs = intersectStrings(userIDs, scheduleUserIDs)
+		} else {
+			userIDs = scheduleUserIDs
+		}
+
+		// If no on-call users found (or intersection is empty), return empty result
+		if len(userIDs) == 0 {
+			empty := &pagerduty.IncidentsResponse{}
+			w.Header().Set("Content-Type", "application/json")
+			if encodeErr := json.NewEncoder(w).Encode(empty); encodeErr != nil {
+				p.client.Log.Error("Failed to encode empty incidents response", "error", encodeErr.Error())
+			}
+			return
+		}
+	}
+
+	incidents, err := pdClient.GetIncidents(statuses, userIDs, 100, 0)
 	if err != nil {
 		p.client.Log.Error("Failed to get incidents from PagerDuty", "error", err.Error())
 		p.handleError(w, r, &APIError{
@@ -293,6 +332,32 @@ func (p *Plugin) handleGetIncidents(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(incidents); err != nil {
 		p.client.Log.Error("Failed to encode incidents response", "error", err.Error())
 	}
+}
+
+func extractUserIDsFromOnCalls(oncalls []pagerduty.OnCall) []string {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, oc := range oncalls {
+		if oc.User.ID != "" && !seen[oc.User.ID] {
+			seen[oc.User.ID] = true
+			ids = append(ids, oc.User.ID)
+		}
+	}
+	return ids
+}
+
+func intersectStrings(a, b []string) []string {
+	set := make(map[string]bool, len(b))
+	for _, v := range b {
+		set[v] = true
+	}
+	var result []string
+	for _, v := range a {
+		if set[v] {
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 // UpdateIncidentAPIRequest represents the API request body for updating an incident

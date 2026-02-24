@@ -3,7 +3,7 @@
 
 import React, {useState} from 'react';
 
-import type {Incident} from '@/types/pagerduty';
+import type {Incident, IncidentFilters, Schedule, User} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -14,6 +14,11 @@ interface Props {
     onIncidentClick: (incident: Incident) => void;
     onAcknowledge: (incidentId: string) => Promise<void>;
     onResolve: (incidentId: string) => Promise<void>;
+    schedules: Schedule[];
+    users: User[];
+    filters: IncidentFilters;
+    onFiltersChange: (filters: IncidentFilters) => void;
+    userScheduleMap: Record<string, string>;
 }
 
 const formatTimeAgo = (dateString: string): string => {
@@ -62,32 +67,21 @@ const getStatusLabel = (status: string): string => {
     }
 };
 
-const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onIncidentClick, onAcknowledge, onResolve}) => {
+const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onIncidentClick, onAcknowledge, onResolve, schedules, users, filters, onFiltersChange, userScheduleMap}) => {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-    if (loading) {
-        return (
-            <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
-                {'Loading incidents...'}
-            </div>
-        );
-    }
+    const hasActiveFilters = Boolean(filters.scheduleId || (filters.userIds && filters.userIds.length > 0));
 
-    if (error) {
-        return (
-            <div style={{color: theme.errorTextColor, fontSize: '14px'}}>
-                {`Error: ${error}`}
-            </div>
-        );
-    }
-
-    if (!incidents || incidents.length === 0) {
-        return (
-            <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
-                {'No active incidents'}
-            </div>
-        );
-    }
+    const selectStyle: React.CSSProperties = {
+        flex: 1,
+        minWidth: '0',
+        padding: '6px 8px',
+        borderRadius: '4px',
+        border: `1px solid ${theme.centerChannelColor}20`,
+        backgroundColor: theme.centerChannelBg,
+        color: theme.centerChannelColor,
+        fontSize: '12px',
+    };
 
     const handleAction = async (e: React.MouseEvent, incidentId: string, action: (id: string) => Promise<void>) => {
         e.stopPropagation();
@@ -99,8 +93,110 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
         }
     };
 
+    const filterBar = (
+        <div
+            className='incident-filters'
+            style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '12px',
+                alignItems: 'center',
+            }}
+        >
+            <select
+                className='incident-filter-schedule'
+                value={filters.scheduleId || ''}
+                onChange={(e) => onFiltersChange({
+                    ...filters,
+                    scheduleId: e.target.value || undefined,
+                })}
+                style={selectStyle}
+            >
+                <option value=''>{'All Schedules'}</option>
+                {schedules.map((s) => (
+                    <option
+                        key={s.id}
+                        value={s.id}
+                    >
+                        {s.name}
+                    </option>
+                ))}
+            </select>
+            <select
+                className='incident-filter-user'
+                value={(filters.userIds && filters.userIds[0]) || ''}
+                onChange={(e) => onFiltersChange({
+                    ...filters,
+                    userIds: e.target.value ? [e.target.value] : undefined,
+                })}
+                style={selectStyle}
+            >
+                <option value=''>{'All Responders'}</option>
+                {users.map((u) => (
+                    <option
+                        key={u.id}
+                        value={u.id}
+                    >
+                        {u.name}
+                    </option>
+                ))}
+            </select>
+            {hasActiveFilters && (
+                <button
+                    className='incident-filter-clear'
+                    onClick={() => onFiltersChange({})}
+                    style={{
+                        backgroundColor: 'transparent',
+                        color: theme.linkColor,
+                        border: 'none',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        whiteSpace: 'nowrap' as const,
+                    }}
+                >
+                    {'Clear'}
+                </button>
+            )}
+        </div>
+    );
+
+    if (loading) {
+        return (
+            <div>
+                {filterBar}
+                <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
+                    {'Loading incidents...'}
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div>
+                {filterBar}
+                <div style={{color: theme.errorTextColor, fontSize: '14px'}}>
+                    {`Error: ${error}`}
+                </div>
+            </div>
+        );
+    }
+
+    if (!incidents || incidents.length === 0) {
+        return (
+            <div>
+                {filterBar}
+                <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
+                    {hasActiveFilters ? 'No incidents match the selected filters' : 'No active incidents'}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className='incident-list'>
+            {filterBar}
             <div
                 style={{
                     fontSize: '16px',
@@ -114,6 +210,8 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
             {incidents.map((incident) => {
                 const statusColor = getStatusColor(incident.status || '', theme);
                 const isLoading = actionLoading === incident.id;
+                const assigneeSchedules = (incident.assignments || []).map((a) => userScheduleMap[a.assignee.id]);
+                const scheduleName = assigneeSchedules.find(Boolean) || null;
 
                 return (
                     <div
@@ -172,11 +270,17 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                             {incident.title}
                         </div>
 
-                        {incident.service?.summary && (
-                            <div style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7, marginBottom: '8px'}}>
-                                {incident.service.summary}
-                            </div>
-                        )}
+                        <div style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7, marginBottom: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap'}}>
+                            {incident.service?.summary && (
+                                <span>{incident.service.summary}</span>
+                            )}
+                            {scheduleName && (
+                                <span>
+                                    {incident.service?.summary ? '·' : ''}
+                                    {` ${scheduleName}`}
+                                </span>
+                            )}
+                        </div>
 
                         <div style={{display: 'flex', gap: '6px'}}>
                             {incident.status === 'triggered' && (

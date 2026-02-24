@@ -195,6 +195,22 @@ describe('Client', () => {
 
             await expect(client.getIncidents()).rejects.toThrow('Failed to retrieve incidents');
         });
+
+        it('should pass filter query params', async () => {
+            const mockIncidents = {incidents: []};
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockIncidents,
+            });
+
+            await client.getIncidents({userIds: ['U1', 'U2'], scheduleId: 'SCHED1'});
+
+            expect(global.fetch).toHaveBeenCalledWith(
+                'http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents?user_ids=U1%2CU2&schedule_id=SCHED1',
+                expect.objectContaining({method: 'GET'}),
+            );
+        });
     });
 
     describe('updateIncident', () => {

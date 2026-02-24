@@ -475,6 +475,7 @@ func TestClient_GetIncidents(t *testing.T) {
 	tests := []struct {
 		name     string
 		statuses []string
+		userIDs  []string
 		mockFunc func(req *http.Request) (*http.Response, error)
 		wantErr  bool
 		wantLen  int
@@ -489,6 +490,20 @@ func TestClient_GetIncidents(t *testing.T) {
 				assert.Equal(t, []string{"triggered", "acknowledged"}, query["statuses[]"])
 				assert.Equal(t, "created_at:desc", query.Get("sort_by"))
 				assert.Equal(t, "100", query.Get("limit"))
+				assert.Empty(t, query["user_ids[]"])
+				return newMockResponse(200, `{"incidents": [{"id": "INC1", "title": "Test", "status": "triggered"}], "limit": 100, "offset": 0, "more": false, "total": 1}`), nil
+			},
+			wantErr: false,
+			wantLen: 1,
+		},
+		{
+			name:     "with user ID filters",
+			statuses: []string{"triggered"},
+			userIDs:  []string{"USER1", "USER2"},
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				query := req.URL.Query()
+				assert.Equal(t, []string{"USER1", "USER2"}, query["user_ids[]"])
+				assert.Equal(t, []string{"triggered"}, query["statuses[]"])
 				return newMockResponse(200, `{"incidents": [{"id": "INC1", "title": "Test", "status": "triggered"}], "limit": 100, "offset": 0, "more": false, "total": 1}`), nil
 			},
 			wantErr: false,
@@ -520,7 +535,7 @@ func TestClient_GetIncidents(t *testing.T) {
 				httpClient: &mockHTTPClient{doFunc: tt.mockFunc},
 			}
 
-			response, err := client.GetIncidents(tt.statuses, 100, 0)
+			response, err := client.GetIncidents(tt.statuses, tt.userIDs, 100, 0)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

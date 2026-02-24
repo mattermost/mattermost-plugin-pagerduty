@@ -179,3 +179,8 @@ export interface IncidentNotesResponse {
 export interface CreateIncidentNoteResponse {
     note: IncidentNote;
 }
+
+export interface IncidentFilters {
+    userIds?: string[];
+    scheduleId?: string;
+}

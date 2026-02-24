@@ -2,6 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
+import type {IncidentFilters} from '@/types/pagerduty';
 
 export class Client {
     private baseUrl: string;
@@ -106,8 +107,20 @@ export class Client {
         return response.json();
     }
 
-    async getIncidents() {
-        const response = await fetch(`${this.baseUrl}/incidents`, {
+    async getIncidents(filters?: IncidentFilters) {
+        const params = new URLSearchParams();
+        if (filters?.userIds && filters.userIds.length > 0) {
+            params.set('user_ids', filters.userIds.join(','));
+        }
+        if (filters?.scheduleId) {
+            params.set('schedule_id', filters.scheduleId);
+        }
+        const queryString = params.toString();
+        const url = queryString ?
+            `${this.baseUrl}/incidents?${queryString}` :
+            `${this.baseUrl}/incidents`;
+
+        const response = await fetch(url, {
             method: 'GET',
             credentials: 'include',
             headers: {

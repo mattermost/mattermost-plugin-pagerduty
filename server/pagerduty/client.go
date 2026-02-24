@@ -239,14 +239,17 @@ func (c *Client) CreateIncident(title, description, serviceID string, assigneeID
 	return &response, nil
 }
 
-// GetIncidents retrieves incidents from PagerDuty filtered by statuses
-func (c *Client) GetIncidents(statuses []string, limit, offset int) (*IncidentsResponse, error) {
+// GetIncidents retrieves incidents from PagerDuty filtered by statuses and optionally by user IDs
+func (c *Client) GetIncidents(statuses, userIDs []string, limit, offset int) (*IncidentsResponse, error) {
 	params := url.Values{}
 	params.Set("limit", fmt.Sprintf("%d", limit))
 	params.Set("offset", fmt.Sprintf("%d", offset))
 	params.Set("sort_by", "created_at:desc")
 	for _, status := range statuses {
 		params.Add("statuses[]", status)
+	}
+	for _, uid := range userIDs {
+		params.Add("user_ids[]", uid)
 	}
 
 	body, err := c.doRequest("GET", "/incidents", params)

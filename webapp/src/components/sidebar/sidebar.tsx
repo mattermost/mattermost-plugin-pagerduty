@@ -11,7 +11,7 @@ import ScheduleDetails from './schedule_details';
 import ScheduleList from './schedule_list';
 
 import client from '@/client/client';
-import type {Incident, OnCall, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
+import type {Incident, IncidentFilters, OnCall, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 type TabName = 'oncall' | 'schedules' | 'incidents';
@@ -48,6 +48,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     // Incidents tab state
     const [incidents, setIncidents] = useState<Incident[]>([]);
     const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+    const [incidentFilters, setIncidentFilters] = useState<IncidentFilters>({});
+    const [filterSchedules, setFilterSchedules] = useState<Schedule[]>([]);
+    const [filterUsers, setFilterUsers] = useState<User[]>([]);
+    const [userScheduleMap, setUserScheduleMap] = useState<Record<string, string>>({});
 
     // Shared state
     const [loading, setLoading] = useState(true);
@@ -103,13 +107,13 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         }
     }, []);
 
-    const fetchIncidents = useCallback(async (silent = false) => {
+    const fetchIncidents = useCallback(async (silent = false, filters?: IncidentFilters) => {
         try {
             if (!silent) {
                 setLoading(true);
             }
             setError(null);
-            const data = await client.getIncidents();
+            const data = await client.getIncidents(filters);
             setIncidents(data.incidents || []);
             setLastRefreshed(new Date());
         } catch (err) {
@@ -120,6 +124,30 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             if (!silent) {
                 setLoading(false);
             }
+        }
+    }, []);
+
+    const loadFilterOptions = useCallback(async () => {
+        try {
+            const [schedulesData, onCallsData] = await Promise.all([
+                client.getSchedules(),
+                client.getOnCalls(),
+            ]);
+            setFilterSchedules(schedulesData.schedules || []);
+            const usersMap = new Map<string, User>();
+            const scheduleMap: Record<string, string> = {};
+            for (const oc of (onCallsData.oncalls || [])) {
+                if (oc.user && !usersMap.has(oc.user.id)) {
+                    usersMap.set(oc.user.id, oc.user);
+                }
+                if (oc.user && oc.schedule?.name && !scheduleMap[oc.user.id]) {
+                    scheduleMap[oc.user.id] = oc.schedule.name;
+                }
+            }
+            setFilterUsers(Array.from(usersMap.values()));
+            setUserScheduleMap(scheduleMap);
+        } catch {
+            // Filter options failing shouldn't block incidents
         }
     }, []);
 
@@ -145,14 +173,14 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 break;
             case 'incidents':
                 if (!selectedIncident) {
-                    fetchIncidents(true);
+                    fetchIncidents(true, incidentFilters);
                 }
                 break;
             }
         }, REFRESH_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [activeTab, selectedSchedule, selectedIncident, fetchOnCalls, fetchSchedules, fetchIncidents]);
+    }, [activeTab, selectedSchedule, selectedIncident, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
 
     // Tab change handler
     const handleTabChange = (tab: TabName) => {
@@ -171,7 +199,8 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             fetchSchedules();
             break;
         case 'incidents':
-            fetchIncidents();
+            fetchIncidents(false, incidentFilters);
+            loadFilterOptions();
             break;
         }
     };
@@ -200,13 +229,18 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     const handleAcknowledge = async (incidentId: string) => {
         await client.updateIncident(incidentId, 'acknowledged');
-        await fetchIncidents(true);
+        await fetchIncidents(true, incidentFilters);
     };
 
     const handleResolve = async (incidentId: string) => {
         await client.updateIncident(incidentId, 'resolved');
-        await fetchIncidents(true);
+        await fetchIncidents(true, incidentFilters);
     };
+
+    const handleIncidentFiltersChange = useCallback((newFilters: IncidentFilters) => {
+        setIncidentFilters(newFilters);
+        fetchIncidents(false, newFilters);
+    }, [fetchIncidents]);
 
     const handleIncidentUpdated = (updatedIncident: Incident) => {
         setSelectedIncident(updatedIncident);
@@ -239,7 +273,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             setSelectedSchedule(null);
         } else if (selectedIncident) {
             setSelectedIncident(null);
-            fetchIncidents(true);
+            fetchIncidents(true, incidentFilters);
         }
     };
 
@@ -261,7 +295,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 // Refresh notes by re-selecting
                 setSelectedIncident({...selectedIncident});
             } else {
-                fetchIncidents();
+                fetchIncidents(false, incidentFilters);
             }
             break;
         }
@@ -464,6 +498,11 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             onIncidentClick={handleIncidentClick}
                             onAcknowledge={handleAcknowledge}
                             onResolve={handleResolve}
+                            schedules={filterSchedules}
+                            users={filterUsers}
+                            filters={incidentFilters}
+                            onFiltersChange={handleIncidentFiltersChange}
+                            userScheduleMap={userScheduleMap}
                         />
                     )
                 )}
