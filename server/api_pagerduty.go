@@ -3,7 +3,11 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
 )
@@ -244,5 +248,319 @@ func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(incident); err != nil {
 		p.client.Log.Error("Failed to encode create incident response", "error", err.Error())
+	}
+}
+
+// getUserEmail retrieves the email address for a Mattermost user
+func (p *Plugin) getUserEmail(userID string) (string, error) {
+	user, err := p.client.User.Get(userID)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get user")
+	}
+	return user.Email, nil
+}
+
+func (p *Plugin) handleGetIncidents(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleGetIncidents called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	config := p.getConfiguration()
+	if err := config.IsValid(); err != nil {
+		p.client.Log.Warn("Plugin configuration invalid", "error", err)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.config.invalid",
+			Message:    "Plugin not configured",
+			StatusCode: http.StatusNotImplemented,
+		})
+		return
+	}
+
+	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+
+	statuses := []string{"triggered", "acknowledged"}
+
+	// Parse optional user_ids filter (comma-separated)
+	var userIDs []string
+	if rawUserIDs := r.URL.Query().Get("user_ids"); rawUserIDs != "" {
+		userIDs = strings.Split(rawUserIDs, ",")
+	}
+
+	// Parse optional schedule_id filter — resolve to on-call user IDs
+	if scheduleID := r.URL.Query().Get("schedule_id"); scheduleID != "" {
+		p.client.Log.Debug("Resolving schedule to on-call users for incident filter", "schedule_id", scheduleID)
+		oncalls, err := pdClient.GetOnCallsForSchedule(scheduleID)
+		if err != nil {
+			p.client.Log.Error("Failed to resolve schedule on-calls for filtering", "error", err.Error(), "schedule_id", scheduleID)
+			p.handleError(w, r, &APIError{
+				ID:         "api.pagerduty.incidents.schedule.error",
+				Message:    "Failed to resolve schedule for filtering",
+				StatusCode: http.StatusInternalServerError,
+			})
+			return
+		}
+
+		scheduleUserIDs := extractUserIDsFromOnCalls(oncalls.OnCalls)
+		if len(userIDs) > 0 {
+			userIDs = intersectStrings(userIDs, scheduleUserIDs)
+		} else {
+			userIDs = scheduleUserIDs
+		}
+
+		// If no on-call users found (or intersection is empty), return empty result
+		if len(userIDs) == 0 {
+			empty := &pagerduty.IncidentsResponse{}
+			w.Header().Set("Content-Type", "application/json")
+			if encodeErr := json.NewEncoder(w).Encode(empty); encodeErr != nil {
+				p.client.Log.Error("Failed to encode empty incidents response", "error", encodeErr.Error())
+			}
+			return
+		}
+	}
+
+	incidents, err := pdClient.GetIncidents(statuses, userIDs, 100, 0)
+	if err != nil {
+		p.client.Log.Error("Failed to get incidents from PagerDuty", "error", err.Error())
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incidents.error",
+			Message:    "Failed to retrieve incidents",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully retrieved incidents", "count", len(incidents.Incidents))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(incidents); err != nil {
+		p.client.Log.Error("Failed to encode incidents response", "error", err.Error())
+	}
+}
+
+func extractUserIDsFromOnCalls(oncalls []pagerduty.OnCall) []string {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, oc := range oncalls {
+		if oc.User.ID != "" && !seen[oc.User.ID] {
+			seen[oc.User.ID] = true
+			ids = append(ids, oc.User.ID)
+		}
+	}
+	return ids
+}
+
+func intersectStrings(a, b []string) []string {
+	set := make(map[string]bool, len(b))
+	for _, v := range b {
+		set[v] = true
+	}
+	var result []string
+	for _, v := range a {
+		if set[v] {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+// UpdateIncidentAPIRequest represents the API request body for updating an incident
+type UpdateIncidentAPIRequest struct {
+	Status string `json:"status"`
+}
+
+func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	p.client.Log.Debug("handleUpdateIncident called", "user_id", userID)
+
+	config := p.getConfiguration()
+	if err := config.IsValid(); err != nil {
+		p.client.Log.Warn("Plugin configuration invalid", "error", err)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.config.invalid",
+			Message:    "Plugin not configured",
+			StatusCode: http.StatusNotImplemented,
+		})
+		return
+	}
+
+	vars := mux.Vars(r)
+	incidentID := vars["id"]
+	if incidentID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.id.missing",
+			Message:    "Incident ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	var req UpdateIncidentAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.Status == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.status.missing",
+			Message:    "Status is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	email, err := p.getUserEmail(userID)
+	if err != nil {
+		p.client.Log.Error("Failed to get user email", "error", err.Error(), "user_id", userID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.user.email.error",
+			Message:    "Failed to get user email",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	incident, err := pdClient.UpdateIncident(incidentID, req.Status, email)
+	if err != nil {
+		p.client.Log.Error("Failed to update incident", "error", err.Error(), "incident_id", incidentID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.update.error",
+			Message:    "Failed to update incident",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully updated incident", "incident_id", incidentID, "status", req.Status)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(incident); err != nil {
+		p.client.Log.Error("Failed to encode update incident response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleGetIncidentNotes(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleGetIncidentNotes called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	config := p.getConfiguration()
+	if err := config.IsValid(); err != nil {
+		p.client.Log.Warn("Plugin configuration invalid", "error", err)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.config.invalid",
+			Message:    "Plugin not configured",
+			StatusCode: http.StatusNotImplemented,
+		})
+		return
+	}
+
+	vars := mux.Vars(r)
+	incidentID := vars["id"]
+	if incidentID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.id.missing",
+			Message:    "Incident ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	notes, err := pdClient.GetIncidentNotes(incidentID)
+	if err != nil {
+		p.client.Log.Error("Failed to get incident notes", "error", err.Error(), "incident_id", incidentID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.notes.error",
+			Message:    "Failed to retrieve incident notes",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully retrieved incident notes", "incident_id", incidentID, "count", len(notes.Notes))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(notes); err != nil {
+		p.client.Log.Error("Failed to encode incident notes response", "error", err.Error())
+	}
+}
+
+// CreateIncidentNoteAPIRequest represents the API request for adding a note
+type CreateIncidentNoteAPIRequest struct {
+	Content string `json:"content"`
+}
+
+func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	p.client.Log.Debug("handleCreateIncidentNote called", "user_id", userID)
+
+	config := p.getConfiguration()
+	if err := config.IsValid(); err != nil {
+		p.client.Log.Warn("Plugin configuration invalid", "error", err)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.config.invalid",
+			Message:    "Plugin not configured",
+			StatusCode: http.StatusNotImplemented,
+		})
+		return
+	}
+
+	vars := mux.Vars(r)
+	incidentID := vars["id"]
+	if incidentID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.id.missing",
+			Message:    "Incident ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	var req CreateIncidentNoteAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.note.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.Content == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.note.content.missing",
+			Message:    "Note content is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	email, err := p.getUserEmail(userID)
+	if err != nil {
+		p.client.Log.Error("Failed to get user email", "error", err.Error(), "user_id", userID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.user.email.error",
+			Message:    "Failed to get user email",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	note, err := pdClient.CreateIncidentNote(incidentID, req.Content, email)
+	if err != nil {
+		p.client.Log.Error("Failed to create incident note", "error", err.Error(), "incident_id", incidentID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.note.create.error",
+			Message:    "Failed to create incident note",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully created incident note", "incident_id", incidentID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(note); err != nil {
+		p.client.Log.Error("Failed to encode create incident note response", "error", err.Error())
 	}
 }

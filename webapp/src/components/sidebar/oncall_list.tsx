@@ -3,7 +3,7 @@
 
 import React from 'react';
 
-import type {OnCall} from '@/types/pagerduty';
+import type {OnCall, User} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -11,9 +11,10 @@ interface Props {
     theme: Theme;
     loading: boolean;
     error: string | null;
+    onPageUser?: (user: User) => void;
 }
 
-const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error}) => {
+const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser}) => {
     if (loading) {
         return (
             <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
@@ -114,6 +115,29 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error}) => {
                                     </div>
                                 )}
                             </div>
+                            {onPageUser && (
+                                <button
+                                    className='page-oncall-button'
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPageUser(oncall.user);
+                                    }}
+                                    style={{
+                                        backgroundColor: theme.buttonBg,
+                                        color: theme.buttonColor,
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        marginLeft: '8px',
+                                        whiteSpace: 'nowrap' as const,
+                                    }}
+                                >
+                                    {'Page'}
+                                </button>
+                            )}
                         </div>
                     ))}
                 </div>

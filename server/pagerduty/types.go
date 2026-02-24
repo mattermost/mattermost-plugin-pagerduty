@@ -150,8 +150,9 @@ type ServicesResponse struct {
 
 // ServiceReference represents a reference to a service
 type ServiceReference struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Summary string `json:"summary,omitempty"`
 }
 
 // AssigneeReference represents a reference to an assignee
@@ -165,18 +166,27 @@ type Assignment struct {
 	Assignee AssigneeReference `json:"assignee"`
 }
 
+// Priority represents a PagerDuty incident priority
+type Priority struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Summary string `json:"summary"`
+}
+
 // Incident represents a PagerDuty incident
 type Incident struct {
-	ID           string         `json:"id"`
-	Type         string         `json:"type"`
-	Title        string         `json:"title"`
-	Description  string         `json:"description,omitempty"`
-	Service      ServiceReference `json:"service"`
-	Assignments  []Assignment   `json:"assignments,omitempty"`
-	Status       string         `json:"status,omitempty"`
-	CreatedAt    string         `json:"created_at,omitempty"`
-	IncidentKey  string         `json:"incident_key,omitempty"`
-	HtmlURL      string         `json:"html_url,omitempty"`
+	ID          string           `json:"id"`
+	Type        string           `json:"type"`
+	Title       string           `json:"title"`
+	Description string           `json:"description,omitempty"`
+	Service     ServiceReference `json:"service"`
+	Assignments []Assignment     `json:"assignments,omitempty"`
+	Status      string           `json:"status,omitempty"`
+	Urgency     string           `json:"urgency,omitempty"`
+	Priority    *Priority        `json:"priority,omitempty"`
+	CreatedAt   string           `json:"created_at,omitempty"`
+	IncidentKey string           `json:"incident_key,omitempty"`
+	HTMLURL     string           `json:"html_url,omitempty"`
 }
 
 // CreateIncidentRequest represents the request to create an incident
@@ -187,4 +197,54 @@ type CreateIncidentRequest struct {
 // CreateIncidentResponse wraps the incident creation response
 type CreateIncidentResponse struct {
 	Incident Incident `json:"incident"`
+}
+
+// IncidentsResponse wraps the incidents list response from PagerDuty
+type IncidentsResponse struct {
+	ListResponse
+	Incidents []Incident `json:"incidents"`
+}
+
+// IncidentResponse wraps a single incident response
+type IncidentResponse struct {
+	Incident Incident `json:"incident"`
+}
+
+// UpdateIncidentRequest represents the request to update an incident
+type UpdateIncidentRequest struct {
+	Incident UpdateIncidentBody `json:"incident"`
+}
+
+// UpdateIncidentBody contains the fields that can be updated on an incident
+type UpdateIncidentBody struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+}
+
+// IncidentNote represents a note on a PagerDuty incident
+type IncidentNote struct {
+	ID        string        `json:"id"`
+	Content   string        `json:"content"`
+	CreatedAt string        `json:"created_at"`
+	User      UserReference `json:"user"`
+}
+
+// IncidentNotesResponse wraps the list of notes for an incident
+type IncidentNotesResponse struct {
+	Notes []IncidentNote `json:"notes"`
+}
+
+// CreateIncidentNoteRequest represents the request body for creating a note
+type CreateIncidentNoteRequest struct {
+	Note CreateIncidentNoteBody `json:"note"`
+}
+
+// CreateIncidentNoteBody contains the note content
+type CreateIncidentNoteBody struct {
+	Content string `json:"content"`
+}
+
+// CreateIncidentNoteResponse wraps the note creation response
+type CreateIncidentNoteResponse struct {
+	Note IncidentNote `json:"note"`
 }

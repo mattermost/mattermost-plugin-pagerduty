@@ -471,6 +471,269 @@ func TestClient_GetOnCallsForSchedule(t *testing.T) {
 	assert.NotNil(t, response)
 }
 
+func TestClient_GetIncidents(t *testing.T) {
+	tests := []struct {
+		name     string
+		statuses []string
+		userIDs  []string
+		mockFunc func(req *http.Request) (*http.Response, error)
+		wantErr  bool
+		wantLen  int
+	}{
+		{
+			name:     "successful retrieval with status filters",
+			statuses: []string{"triggered", "acknowledged"},
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "GET", req.Method)
+				assert.Contains(t, req.URL.Path, "/incidents")
+				query := req.URL.Query()
+				assert.Equal(t, []string{"triggered", "acknowledged"}, query["statuses[]"])
+				assert.Equal(t, "created_at:desc", query.Get("sort_by"))
+				assert.Equal(t, "100", query.Get("limit"))
+				assert.Empty(t, query["user_ids[]"])
+				return newMockResponse(200, `{"incidents": [{"id": "INC1", "title": "Test", "status": "triggered"}], "limit": 100, "offset": 0, "more": false, "total": 1}`), nil
+			},
+			wantErr: false,
+			wantLen: 1,
+		},
+		{
+			name:     "with user ID filters",
+			statuses: []string{"triggered"},
+			userIDs:  []string{"USER1", "USER2"},
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				query := req.URL.Query()
+				assert.Equal(t, []string{"USER1", "USER2"}, query["user_ids[]"])
+				assert.Equal(t, []string{"triggered"}, query["statuses[]"])
+				return newMockResponse(200, `{"incidents": [{"id": "INC1", "title": "Test", "status": "triggered"}], "limit": 100, "offset": 0, "more": false, "total": 1}`), nil
+			},
+			wantErr: false,
+			wantLen: 1,
+		},
+		{
+			name:     "API error",
+			statuses: []string{"triggered"},
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(401, `{"error": {"message": "Unauthorized", "code": 2001}}`), nil
+			},
+			wantErr: true,
+		},
+		{
+			name:     "invalid JSON response",
+			statuses: []string{"triggered"},
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(200, `invalid json`), nil
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{
+				baseURL:    "https://api.pagerduty.com",
+				apiToken:   "test-token",
+				httpClient: &mockHTTPClient{doFunc: tt.mockFunc},
+			}
+
+			response, err := client.GetIncidents(tt.statuses, tt.userIDs, 100, 0)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, response.Incidents, tt.wantLen)
+		})
+	}
+}
+
+func TestClient_UpdateIncident(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       string
+		status   string
+		email    string
+		mockFunc func(req *http.Request) (*http.Response, error)
+		wantErr  bool
+	}{
+		{
+			name:   "successful acknowledge",
+			id:     "INC1",
+			status: "acknowledged",
+			email:  "user@example.com",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "PUT", req.Method)
+				assert.Contains(t, req.URL.Path, "/incidents/INC1")
+				assert.Equal(t, "user@example.com", req.Header.Get("From"))
+
+				// Verify body
+				body, _ := io.ReadAll(req.Body)
+				assert.Contains(t, string(body), `"status":"acknowledged"`)
+				assert.Contains(t, string(body), `"type":"incident_reference"`)
+
+				return newMockResponse(200, `{"incident": {"id": "INC1", "status": "acknowledged"}}`), nil
+			},
+			wantErr: false,
+		},
+		{
+			name:   "successful resolve",
+			id:     "INC2",
+			status: "resolved",
+			email:  "admin@example.com",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "PUT", req.Method)
+				assert.Contains(t, req.URL.Path, "/incidents/INC2")
+				assert.Equal(t, "admin@example.com", req.Header.Get("From"))
+				return newMockResponse(200, `{"incident": {"id": "INC2", "status": "resolved"}}`), nil
+			},
+			wantErr: false,
+		},
+		{
+			name:   "API error",
+			id:     "INC1",
+			status: "acknowledged",
+			email:  "user@example.com",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(400, `{"error": {"message": "Invalid status", "code": 2001}}`), nil
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{
+				baseURL:    "https://api.pagerduty.com",
+				apiToken:   "test-token",
+				httpClient: &mockHTTPClient{doFunc: tt.mockFunc},
+			}
+
+			response, err := client.UpdateIncident(tt.id, tt.status, tt.email)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.id, response.Incident.ID)
+			assert.Equal(t, tt.status, response.Incident.Status)
+		})
+	}
+}
+
+func TestClient_GetIncidentNotes(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       string
+		mockFunc func(req *http.Request) (*http.Response, error)
+		wantErr  bool
+		wantLen  int
+	}{
+		{
+			name: "successful retrieval",
+			id:   "INC1",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "GET", req.Method)
+				assert.Contains(t, req.URL.Path, "/incidents/INC1/notes")
+				return newMockResponse(200, `{"notes": [{"id": "N1", "content": "test note", "created_at": "2024-01-01T00:00:00Z", "user": {"id": "U1", "type": "user_reference", "summary": "Test User"}}]}`), nil
+			},
+			wantErr: false,
+			wantLen: 1,
+		},
+		{
+			name: "empty notes",
+			id:   "INC2",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(200, `{"notes": []}`), nil
+			},
+			wantErr: false,
+			wantLen: 0,
+		},
+		{
+			name: "API error",
+			id:   "INC1",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(404, `{"error": {"message": "Not Found", "code": 2100}}`), nil
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{
+				baseURL:    "https://api.pagerduty.com",
+				apiToken:   "test-token",
+				httpClient: &mockHTTPClient{doFunc: tt.mockFunc},
+			}
+
+			response, err := client.GetIncidentNotes(tt.id)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, response.Notes, tt.wantLen)
+		})
+	}
+}
+
+func TestClient_CreateIncidentNote(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       string
+		content  string
+		email    string
+		mockFunc func(req *http.Request) (*http.Response, error)
+		wantErr  bool
+	}{
+		{
+			name:    "successful note creation",
+			id:      "INC1",
+			content: "This is a note",
+			email:   "user@example.com",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "POST", req.Method)
+				assert.Contains(t, req.URL.Path, "/incidents/INC1/notes")
+				assert.Equal(t, "user@example.com", req.Header.Get("From"))
+
+				body, _ := io.ReadAll(req.Body)
+				assert.Contains(t, string(body), `"content":"This is a note"`)
+
+				return newMockResponse(201, `{"note": {"id": "N1", "content": "This is a note", "created_at": "2024-01-01T00:00:00Z", "user": {"id": "U1", "type": "user_reference", "summary": "Test User"}}}`), nil
+			},
+			wantErr: false,
+		},
+		{
+			name:    "API error",
+			id:      "INC1",
+			content: "note",
+			email:   "user@example.com",
+			mockFunc: func(req *http.Request) (*http.Response, error) {
+				return newMockResponse(400, `{"error": {"message": "Bad request", "code": 2001}}`), nil
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{
+				baseURL:    "https://api.pagerduty.com",
+				apiToken:   "test-token",
+				httpClient: &mockHTTPClient{doFunc: tt.mockFunc},
+			}
+
+			response, err := client.CreateIncidentNote(tt.id, tt.content, tt.email)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.content, response.Note.Content)
+			assert.NotEmpty(t, response.Note.ID)
+		})
+	}
+}
+
 // Test the actual HTTP client interface
 func TestClient_HTTPClientInterface(t *testing.T) {
 	// Ensure our mock implements the same interface as http.Client
