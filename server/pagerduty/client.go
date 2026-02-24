@@ -24,18 +24,35 @@ type HTTPClient interface {
 
 type Client struct {
 	baseURL    string
-	apiToken   string
+	authHeader string
 	httpClient HTTPClient
 }
 
+// NewOAuthClient creates a PagerDuty client using an OAuth Bearer token.
+func NewOAuthClient(accessToken, baseURL string) *Client {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+
+	return &Client{
+		baseURL:    baseURL,
+		authHeader: "Bearer " + accessToken,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+// NewClient creates a PagerDuty client using a legacy API token.
+// Deprecated: Use NewOAuthClient for OAuth Bearer token authentication.
 func NewClient(apiToken, baseURL string) *Client {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
 
 	return &Client{
-		baseURL:  baseURL,
-		apiToken: apiToken,
+		baseURL:    baseURL,
+		authHeader: "Token token=" + apiToken,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -74,7 +91,7 @@ func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Val
 		return nil, errors.Wrap(err, "failed to create request")
 	}
 
-	req.Header.Set("Authorization", "Token token="+c.apiToken)
+	req.Header.Set("Authorization", c.authHeader)
 	req.Header.Set("Accept", "application/vnd.pagerduty+json;version="+apiVersion)
 	req.Header.Set("Content-Type", "application/json")
 

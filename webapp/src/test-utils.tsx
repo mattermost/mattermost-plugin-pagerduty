@@ -33,6 +33,9 @@ export * from '@testing-library/react';
 
 // Mock the client
 export const mockClient = {
+    getConnectionStatus: jest.fn(),
+    getConnectUrl: jest.fn(),
+    disconnect: jest.fn(),
     getSchedules: jest.fn(),
     getOnCalls: jest.fn(),
     getScheduleDetails: jest.fn(),

@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
-import type {IncidentFilters} from '@/types/pagerduty';
+import type {ConnectionStatus, IncidentFilters} from '@/types/pagerduty';
 
 export class Client {
     private baseUrl: string;
@@ -11,6 +11,42 @@ export class Client {
         // Use window.location.origin to construct the base URL
         const siteUrl = window.location.origin;
         this.baseUrl = `${siteUrl}/plugins/${manifest.id}/api/v1`;
+    }
+
+    async getConnectionStatus(): Promise<ConnectionStatus> {
+        const response = await fetch(`${this.baseUrl}/oauth/status`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to check connection status');
+        }
+
+        return response.json();
+    }
+
+    getConnectUrl(): string {
+        return `${this.baseUrl}/oauth/connect`;
+    }
+
+    async disconnect(): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/oauth/disconnect`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to disconnect');
+        }
     }
 
     async getSchedules() {

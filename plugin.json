@@ -23,11 +23,19 @@
         "footer": "Need help? Visit our [documentation](https://github.com/svelle/mattermost-pagerduty-plugin#configuration).",
         "settings": [
             {
-                "key": "APIToken",
-                "display_name": "PagerDuty API Token",
+                "key": "OAuthClientID",
+                "display_name": "PagerDuty OAuth Client ID",
                 "type": "text",
-                "help_text": "The API token for authenticating with PagerDuty. You can generate one from your PagerDuty account under Configuration > API Access Keys.",
-                "placeholder": "pdus+_xxxxxxxxxxxxxxxxxx",
+                "help_text": "The Client ID from your PagerDuty OAuth application. Create one at https://developer.pagerduty.com/apps.",
+                "placeholder": "",
+                "default": ""
+            },
+            {
+                "key": "OAuthClientSecret",
+                "display_name": "PagerDuty OAuth Client Secret",
+                "type": "text",
+                "help_text": "The Client Secret from your PagerDuty OAuth application.",
+                "placeholder": "",
                 "default": "",
                 "secret": true
             },

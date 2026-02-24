@@ -92,26 +92,21 @@ func TestPlugin_MattermostAuthorizationRequired(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			plugin := &Plugin{}
 
-			// Create a test handler
 			testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("OK"))
 			})
 
-			// Wrap with middleware
 			handler := plugin.MattermostAuthorizationRequired(testHandler)
 
-			// Create request
 			req := httptest.NewRequest("GET", "/test", nil)
 			if tt.userID != "" {
 				req.Header.Set("Mattermost-User-ID", tt.userID)
 			}
 			w := httptest.NewRecorder()
 
-			// Execute
 			handler.ServeHTTP(w, req)
 
-			// Assert
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			assert.Equal(t, tt.expectedBody, w.Body.String())
 		})
@@ -121,8 +116,9 @@ func TestPlugin_MattermostAuthorizationRequired(t *testing.T) {
 func TestPlugin_getConfiguration(t *testing.T) {
 	t.Run("returns configuration", func(t *testing.T) {
 		expectedConfig := &configuration{
-			APIToken:   "test-token",
-			APIBaseURL: "https://api.pagerduty.com",
+			OAuthClientID:     "client-id",
+			OAuthClientSecret: "client-secret",
+			APIBaseURL:        "https://api.pagerduty.com",
 		}
 
 		plugin := &Plugin{
@@ -136,12 +132,12 @@ func TestPlugin_getConfiguration(t *testing.T) {
 	t.Run("handles concurrent access", func(t *testing.T) {
 		plugin := &Plugin{
 			configuration: &configuration{
-				APIToken:   "test-token",
-				APIBaseURL: "https://api.pagerduty.com",
+				OAuthClientID:     "client-id",
+				OAuthClientSecret: "client-secret",
+				APIBaseURL:        "https://api.pagerduty.com",
 			},
 		}
 
-		// Simulate concurrent reads
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {
 			go func() {
@@ -151,7 +147,6 @@ func TestPlugin_getConfiguration(t *testing.T) {
 			}()
 		}
 
-		// Wait for all goroutines
 		for i := 0; i < 10; i++ {
 			<-done
 		}

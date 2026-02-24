@@ -88,7 +88,8 @@ func CreateTestUser(id, username string) *model.User {
 // CreateTestConfig creates a test plugin configuration
 func CreateTestConfig() map[string]interface{} {
 	return map[string]interface{}{
-		"APIToken":   "test-token",
-		"APIBaseURL": "https://api.pagerduty.com",
+		"OAuthClientID":     "test-client-id",
+		"OAuthClientSecret": "test-client-secret",
+		"APIBaseURL":        "https://api.pagerduty.com",
 	}
 }

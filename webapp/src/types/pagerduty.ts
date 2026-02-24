@@ -184,3 +184,7 @@ export interface IncidentFilters {
     userIds?: string[];
     scheduleId?: string;
 }
+
+export interface ConnectionStatus {
+    connected: boolean;
+}

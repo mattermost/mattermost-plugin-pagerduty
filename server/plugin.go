@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -28,9 +29,12 @@ type Plugin struct {
 	// setConfiguration for usage.
 	configuration *configuration
 
+	// siteURL is the Mattermost site URL, used for OAuth redirect URIs.
+	siteURL string
+
 	// createPagerDutyClient is a function to create PagerDuty clients.
 	// This can be overridden in tests to inject mock clients.
-	createPagerDutyClient func(apiToken, baseURL string) *pagerduty.Client
+	createPagerDutyClient func(accessToken, baseURL string) *pagerduty.Client
 }
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
@@ -38,8 +42,8 @@ func (p *Plugin) OnActivate() error {
 	p.client = pluginapi.NewClient(p.MattermostPlugin.API, p.MattermostPlugin.Driver)
 	p.client.Log.Info("PagerDuty plugin activating")
 
-	// Initialize the PagerDuty client factory with the default implementation
-	p.createPagerDutyClient = pagerduty.NewClient
+	// Initialize the PagerDuty client factory with the default OAuth implementation
+	p.createPagerDutyClient = pagerduty.NewOAuthClient
 
 	p.kvstore = kvstore.NewKVStore(p.client)
 
@@ -48,10 +52,8 @@ func (p *Plugin) OnActivate() error {
 		p.client.Log.Error("Site URL is not configured")
 		return errors.New("site URL is not configured")
 	}
-	siteURL := *config.ServiceSettings.SiteURL
-	p.client.Log.Debug("Site URL configured", "url", siteURL)
-
-	// Slash commands and bot removed - sidebar only
+	p.siteURL = *config.ServiceSettings.SiteURL
+	p.client.Log.Debug("Site URL configured", "url", p.siteURL)
 
 	// Log plugin configuration status
 	pluginConfig := p.getConfiguration()
@@ -71,6 +73,29 @@ func (p *Plugin) OnDeactivate() error {
 		p.client.Log.Info("PagerDuty plugin deactivating")
 	}
 	return nil
+}
+
+// getPagerDutyClientForUser retrieves the user's OAuth token from the KV store,
+// refreshes it if expired, and returns a PagerDuty client authenticated as that user.
+func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, error) {
+	token, err := p.kvstore.GetUserToken(userID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve user token")
+	}
+	if token == nil {
+		return nil, fmt.Errorf("not connected to PagerDuty")
+	}
+
+	if token.IsExpired() {
+		p.client.Log.Debug("OAuth token expired, attempting refresh", "user_id", userID)
+		token, err = p.refreshUserToken(userID, token)
+		if err != nil {
+			return nil, fmt.Errorf("PagerDuty session expired, please reconnect: %w", err)
+		}
+	}
+
+	config := p.getConfiguration()
+	return p.createPagerDutyClient(token.AccessToken, config.APIBaseURL), nil
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/
