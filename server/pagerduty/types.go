@@ -175,18 +175,18 @@ type Priority struct {
 
 // Incident represents a PagerDuty incident
 type Incident struct {
-	ID           string           `json:"id"`
-	Type         string           `json:"type"`
-	Title        string           `json:"title"`
-	Description  string           `json:"description,omitempty"`
-	Service      ServiceReference `json:"service"`
-	Assignments  []Assignment     `json:"assignments,omitempty"`
-	Status       string           `json:"status,omitempty"`
-	Urgency      string           `json:"urgency,omitempty"`
-	Priority     *Priority        `json:"priority,omitempty"`
-	CreatedAt    string           `json:"created_at,omitempty"`
-	IncidentKey  string           `json:"incident_key,omitempty"`
-	HtmlURL      string           `json:"html_url,omitempty"`
+	ID          string           `json:"id"`
+	Type        string           `json:"type"`
+	Title       string           `json:"title"`
+	Description string           `json:"description,omitempty"`
+	Service     ServiceReference `json:"service"`
+	Assignments []Assignment     `json:"assignments,omitempty"`
+	Status      string           `json:"status,omitempty"`
+	Urgency     string           `json:"urgency,omitempty"`
+	Priority    *Priority        `json:"priority,omitempty"`
+	CreatedAt   string           `json:"created_at,omitempty"`
+	IncidentKey string           `json:"incident_key,omitempty"`
+	HTMLURL     string           `json:"html_url,omitempty"`
 }
 
 // CreateIncidentRequest represents the request to create an incident

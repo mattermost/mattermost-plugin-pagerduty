@@ -45,7 +45,7 @@ const formatDateTime = (dateString: string): string => {
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
 };
 
-const IncidentDetails: React.FC<Props> = ({incident, onBack, theme, onIncidentUpdated}) => {
+const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) => {
     const [notes, setNotes] = useState<IncidentNote[]>([]);
     const [loadingNotes, setLoadingNotes] = useState(true);
     const [noteContent, setNoteContent] = useState('');
@@ -143,7 +143,10 @@ const IncidentDetails: React.FC<Props> = ({incident, onBack, theme, onIncidentUp
     const statusColor = getStatusColor(incident.status || '', theme);
 
     return (
-        <div className='incident-details-container' style={{padding: '4px 0'}}>
+        <div
+            className='incident-details-container'
+            style={{padding: '4px 0'}}
+        >
             {successMessage && (
                 <div
                     className='success-message'
@@ -283,10 +286,8 @@ const IncidentDetails: React.FC<Props> = ({incident, onBack, theme, onIncidentUp
                     </button>
                 )}
                 {incident.html_url && (
-                    <a
-                        href={incident.html_url}
-                        target='_blank'
-                        rel='noopener noreferrer'
+                    <button
+                        onClick={() => window.open(incident.html_url, '_blank', 'noopener,noreferrer')}
                         style={{
                             color: theme.linkColor,
                             fontSize: '13px',
@@ -296,10 +297,12 @@ const IncidentDetails: React.FC<Props> = ({incident, onBack, theme, onIncidentUp
                             borderRadius: '6px',
                             display: 'inline-flex',
                             alignItems: 'center',
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
                         }}
                     >
                         {'Open in PagerDuty'}
-                    </a>
+                    </button>
                 )}
             </div>
 
@@ -309,15 +312,17 @@ const IncidentDetails: React.FC<Props> = ({incident, onBack, theme, onIncidentUp
                     {'Notes'}
                 </h4>
 
-                {loadingNotes ? (
+                {loadingNotes && (
                     <div style={{fontSize: '13px', color: theme.centerChannelColor, opacity: 0.6}}>
                         {'Loading notes...'}
                     </div>
-                ) : notes.length === 0 ? (
+                )}
+                {!loadingNotes && notes.length === 0 && (
                     <div style={{fontSize: '13px', color: theme.centerChannelColor, opacity: 0.6, marginBottom: '12px'}}>
                         {'No notes yet'}
                     </div>
-                ) : (
+                )}
+                {!loadingNotes && notes.length > 0 && (
                     <div style={{marginBottom: '12px'}}>
                         {notes.map((note) => (
                             <div

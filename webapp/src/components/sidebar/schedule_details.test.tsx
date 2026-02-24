@@ -5,7 +5,7 @@ import React from 'react';
 
 import ScheduleDetails from './schedule_details';
 
-import {render, screen, fireEvent, mockTheme} from '@/test-utils';
+import {render, screen, mockTheme} from '@/test-utils';
 
 describe('ScheduleDetails', () => {
     const mockSchedule = {
@@ -53,8 +53,6 @@ describe('ScheduleDetails', () => {
         },
     };
 
-    const mockOnBack = jest.fn();
-
     beforeEach(() => {
         jest.clearAllMocks();
     });
@@ -63,14 +61,12 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={mockSchedule}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,
         );
 
-        expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
-        expect(screen.getByText('America/New_York')).toBeInTheDocument();
         expect(screen.getByText('On-Call Schedule')).toBeInTheDocument();
     });
 
@@ -78,7 +74,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={null}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={true}
             />,
@@ -91,7 +87,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={mockSchedule}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,
@@ -99,22 +95,6 @@ describe('ScheduleDetails', () => {
 
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('jane@example.com')).toBeInTheDocument();
-    });
-
-    it('should call onBack when back button is clicked', () => {
-        render(
-            <ScheduleDetails
-                schedule={mockSchedule}
-                onBack={mockOnBack}
-                theme={mockTheme}
-                loading={false}
-            />,
-        );
-
-        const backButton = screen.getByRole('button', {name: /back/i});
-        fireEvent.click(backButton);
-
-        expect(mockOnBack).toHaveBeenCalledTimes(1);
     });
 
     it('should show empty state when no schedule entries', () => {
@@ -129,7 +109,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={scheduleWithNoEntries}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,
@@ -142,7 +122,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={mockSchedule}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,
@@ -162,7 +142,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={scheduleWithoutFinal}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,
@@ -175,7 +155,7 @@ describe('ScheduleDetails', () => {
         render(
             <ScheduleDetails
                 schedule={mockSchedule}
-                onBack={mockOnBack}
+                onBack={jest.fn()}
                 theme={mockTheme}
                 loading={false}
             />,

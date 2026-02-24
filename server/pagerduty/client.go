@@ -62,9 +62,9 @@ func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Val
 
 	var requestBody io.Reader
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal request body")
+		jsonBody, marshalErr := json.Marshal(body)
+		if marshalErr != nil {
+			return nil, errors.Wrap(marshalErr, "failed to marshal request body")
 		}
 		requestBody = bytes.NewReader(jsonBody)
 	}

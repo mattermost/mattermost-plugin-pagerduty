@@ -1,12 +1,12 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-
-import {mockTheme} from '@/test-utils';
+import React from 'react';
 
 import IncidentList from './incident_list';
+
+import {mockTheme} from '@/test-utils';
 
 const mockIncidents = [
     {
@@ -79,7 +79,7 @@ describe('IncidentList', () => {
     });
 
     it('should render incidents with titles and services', () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         expect(screen.getByText('Server Down')).toBeTruthy();
         expect(screen.getByText('High Latency')).toBeTruthy();
@@ -88,14 +88,14 @@ describe('IncidentList', () => {
     });
 
     it('should render status badges', () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         expect(screen.getByText('Triggered')).toBeTruthy();
         expect(screen.getByText('Acknowledged')).toBeTruthy();
     });
 
     it('should show acknowledge button only for triggered incidents', () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         // Triggered incident should have Acknowledge button
         const ackButtons = screen.getAllByText('Acknowledge');
@@ -103,7 +103,7 @@ describe('IncidentList', () => {
     });
 
     it('should show resolve button for triggered and acknowledged incidents', () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         // Both triggered and acknowledged should have Resolve button
         const resolveButtons = screen.getAllByText('Resolve');
@@ -111,21 +111,21 @@ describe('IncidentList', () => {
     });
 
     it('should call onIncidentClick when clicking an incident', () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         fireEvent.click(screen.getByTestId('incident-INC1'));
         expect(defaultProps.onIncidentClick).toHaveBeenCalledWith(mockIncidents[0]);
     });
 
     it('should call onAcknowledge when clicking acknowledge button', async () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         fireEvent.click(screen.getByText('Acknowledge'));
         expect(defaultProps.onAcknowledge).toHaveBeenCalledWith('INC1');
     });
 
     it('should call onResolve when clicking resolve button', async () => {
-        render(<IncidentList {...defaultProps} />);
+        render(<IncidentList {...defaultProps}/>);
 
         const resolveButtons = screen.getAllByText('Resolve');
         fireEvent.click(resolveButtons[0]);

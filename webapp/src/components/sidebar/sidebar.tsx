@@ -289,7 +289,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     const showBackButton = selectedSchedule !== null || selectedIncident !== null;
 
-    const tabs: {key: TabName; label: string}[] = [
+    const tabs: Array<{key: TabName; label: string}> = [
         {key: 'oncall', label: 'On-Call'},
         {key: 'schedules', label: 'Schedules'},
         {key: 'incidents', label: 'Incidents'},
@@ -375,9 +375,9 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                                 backgroundColor: 'transparent',
                                 color: activeTab === tab.key ? theme.buttonBg : theme.centerChannelColor,
                                 border: 'none',
-                                borderBottom: activeTab === tab.key
-                                    ? `2px solid ${theme.buttonBg}`
-                                    : '2px solid transparent',
+                                borderBottom: activeTab === tab.key ?
+                                    `2px solid ${theme.buttonBg}` :
+                                    '2px solid transparent',
                                 cursor: 'pointer',
                                 fontWeight: activeTab === tab.key ? 600 : 400,
                                 fontSize: '13px',
@@ -441,8 +441,12 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 {activeTab === 'incidents' && (
                     selectedIncident ? (
                         <div
-                            onFocus={() => { isInteractingRef.current = true; }}
-                            onBlur={() => { isInteractingRef.current = false; }}
+                            onFocus={() => {
+                                isInteractingRef.current = true;
+                            }}
+                            onBlur={() => {
+                                isInteractingRef.current = false;
+                            }}
                         >
                             <IncidentDetails
                                 incident={selectedIncident}

@@ -4,8 +4,8 @@
 import React, {useState, useEffect} from 'react';
 
 import client from '@/client/client';
-import {Service, ServicesResponse, CreateIncidentResponse, User, Schedule} from '@/types/pagerduty';
-import {Theme} from '@/types/theme';
+import type {Service, ServicesResponse, CreateIncidentResponse, User, Schedule} from '@/types/pagerduty';
+import type {Theme} from '@/types/theme';
 
 interface PagingDialogProps {
     theme: Theme;
@@ -55,7 +55,7 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!title.trim() || !selectedServiceId) {
             setError('Title and service are required');
             return;
@@ -174,23 +174,32 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
     const actionText = targetType === 'schedule' ? 'Page Schedule' : 'Page Current On-Call';
 
     return (
-        <div style={dialogStyle} onClick={onClose}>
-            <div style={contentStyle} onClick={(e) => e.stopPropagation()}>
+        <div
+            style={dialogStyle}
+            onClick={onClose}
+        >
+            <div
+                style={contentStyle}
+                onClick={(e) => e.stopPropagation()}
+            >
                 <h2 style={headerStyle}>
-                    {actionText}: {targetDisplayName}
+                    {actionText}{': '}{targetDisplayName}
                 </h2>
-                
+
                 {loadingServices ? (
                     <div style={{textAlign: 'center', padding: '20px'}}>
-                        Loading services...
+                        {'Loading services...'}
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit}>
                         {error && <div style={errorStyle}>{error}</div>}
-                        
+
                         <div>
-                            <label style={labelStyle} htmlFor='incident-title'>
-                                Incident Title *
+                            <label
+                                style={labelStyle}
+                                htmlFor='incident-title'
+                            >
+                                {'Incident Title *'}
                             </label>
                             <input
                                 id='incident-title'
@@ -202,10 +211,13 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
                                 required={true}
                             />
                         </div>
-                        
+
                         <div>
-                            <label style={labelStyle} htmlFor='incident-service'>
-                                Service *
+                            <label
+                                style={labelStyle}
+                                htmlFor='incident-service'
+                            >
+                                {'Service *'}
                             </label>
                             <select
                                 id='incident-service'
@@ -215,16 +227,22 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
                                 required={true}
                             >
                                 {services.map((service) => (
-                                    <option key={service.id} value={service.id}>
+                                    <option
+                                        key={service.id}
+                                        value={service.id}
+                                    >
                                         {service.name}
                                     </option>
                                 ))}
                             </select>
                         </div>
-                        
+
                         <div>
-                            <label style={labelStyle} htmlFor='incident-description'>
-                                Description
+                            <label
+                                style={labelStyle}
+                                htmlFor='incident-description'
+                            >
+                                {'Description'}
                             </label>
                             <textarea
                                 id='incident-description'
@@ -234,7 +252,7 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
                                 placeholder='Additional details about the incident'
                             />
                         </div>
-                        
+
                         <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: '20px'}}>
                             <button
                                 type='button'
@@ -242,7 +260,7 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
                                 style={secondaryButtonStyle}
                                 disabled={loading}
                             >
-                                Cancel
+                                {'Cancel'}
                             </button>
                             <button
                                 type='submit'

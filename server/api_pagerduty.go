@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
+
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
 )
 
