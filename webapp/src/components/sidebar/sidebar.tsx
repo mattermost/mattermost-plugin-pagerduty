@@ -67,6 +67,9 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     const [pagingTarget, setPagingTarget] = useState<{type: 'user'; target: User} | null>(null);
     const [pagingSuccess, setPagingSuccess] = useState<string | null>(null);
 
+    // Timeout ref for auto-clearing paging success message
+    const pagingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Track if user is interacting with a form (to skip auto-refresh)
     const isInteractingRef = useRef(false);
 
@@ -80,6 +83,15 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             setConnected(false);
             return false;
         }
+    }, []);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (pagingSuccessTimeoutRef.current) {
+                clearTimeout(pagingSuccessTimeoutRef.current);
+            }
+        };
     }, []);
 
     // Initial connection check
@@ -115,6 +127,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             setOnCalls([]);
             setSchedules([]);
             setIncidents([]);
+            setIncidentFilters({});
             setLastRefreshed(null);
         } catch {
             // Disconnect failed silently
@@ -242,7 +255,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         return () => clearInterval(interval);
     }, [connected, activeTab, selectedSchedule, selectedIncident, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
 
-    // Tab change handler
+    // Tab change handler — preserves incident filters across tab switches
     const handleTabChange = (tab: TabName) => {
         if (tab === activeTab) {
             return;
@@ -319,7 +332,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         setShowPagingDialog(false);
         setPagingTarget(null);
         setPagingSuccess(`Incident created: ${incident.incident.title}`);
-        setTimeout(() => setPagingSuccess(null), 5000);
+        if (pagingSuccessTimeoutRef.current) {
+            clearTimeout(pagingSuccessTimeoutRef.current);
+        }
+        pagingSuccessTimeoutRef.current = setTimeout(() => setPagingSuccess(null), 5000);
     };
 
     const handleClosePagingDialog = () => {
@@ -361,6 +377,21 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         }
     };
 
+    // Retry handler for list components
+    const handleRetry = useCallback(() => {
+        switch (activeTab) {
+        case 'oncall':
+            fetchOnCalls();
+            break;
+        case 'schedules':
+            fetchSchedules();
+            break;
+        case 'incidents':
+            fetchIncidents(false, incidentFilters);
+            break;
+        }
+    }, [activeTab, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
+
     // Determine header title
     const getHeaderTitle = (): string => {
         if (selectedSchedule) {
@@ -386,7 +417,22 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             <div
                 className='pagerduty-sidebar'
                 style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}
+                aria-busy='true'
             >
+                <style>
+                    {`@keyframes pagerduty-skeleton-pulse {
+                        0%, 100% { opacity: 0.4; }
+                        50% { opacity: 1; }
+                    }
+                    .pagerduty-sidebar button:focus-visible,
+                    .pagerduty-sidebar [role="tab"]:focus-visible,
+                    .pagerduty-sidebar input:focus-visible,
+                    .pagerduty-sidebar select:focus-visible,
+                    .pagerduty-sidebar textarea:focus-visible {
+                        outline: 2px solid currentColor;
+                        outline-offset: 2px;
+                    }`}
+                </style>
                 <p style={{color: theme.centerChannelColor, opacity: 0.6}}>{'Loading...'}</p>
             </div>
         );
@@ -399,6 +445,20 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 className='pagerduty-sidebar'
                 style={{height: '100%', display: 'flex', flexDirection: 'column'}}
             >
+                <style>
+                    {`@keyframes pagerduty-skeleton-pulse {
+                        0%, 100% { opacity: 0.4; }
+                        50% { opacity: 1; }
+                    }
+                    .pagerduty-sidebar button:focus-visible,
+                    .pagerduty-sidebar [role="tab"]:focus-visible,
+                    .pagerduty-sidebar input:focus-visible,
+                    .pagerduty-sidebar select:focus-visible,
+                    .pagerduty-sidebar textarea:focus-visible {
+                        outline: 2px solid currentColor;
+                        outline-offset: 2px;
+                    }`}
+                </style>
                 <div
                     style={{
                         padding: '12px 16px',
@@ -427,6 +487,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         viewBox='0 0 64 64'
                         xmlns='http://www.w3.org/2000/svg'
                         style={{marginBottom: '16px'}}
+                        aria-hidden='true'
                     >
                         <circle
                             cx='32'
@@ -472,6 +533,22 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             className='pagerduty-sidebar'
             style={{height: '100%', display: 'flex', flexDirection: 'column'}}
         >
+            {/* Global styles for skeleton animations and focus outlines */}
+            <style>
+                {`@keyframes pagerduty-skeleton-pulse {
+                    0%, 100% { opacity: 0.4; }
+                    50% { opacity: 1; }
+                }
+                .pagerduty-sidebar button:focus-visible,
+                .pagerduty-sidebar [role="tab"]:focus-visible,
+                .pagerduty-sidebar input:focus-visible,
+                .pagerduty-sidebar select:focus-visible,
+                .pagerduty-sidebar textarea:focus-visible {
+                    outline: 2px solid currentColor;
+                    outline-offset: 2px;
+                }`}
+            </style>
+
             {/* Header */}
             <div
                 style={{
@@ -486,6 +563,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     {showBackButton && (
                         <button
                             onClick={handleBack}
+                            aria-label='Go back'
                             style={{
                                 backgroundColor: 'transparent',
                                 color: theme.linkColor,
@@ -497,7 +575,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             }}
                             title='Back'
                         >
-                            {'←'}
+                            {'\u2190'}
                         </button>
                     )}
                     <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
@@ -512,6 +590,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     )}
                     <button
                         onClick={handleRefresh}
+                        aria-label='Refresh data'
                         style={{
                             backgroundColor: 'transparent',
                             color: theme.linkColor,
@@ -526,6 +605,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     <button
                         className='pagerduty-disconnect-button'
                         onClick={handleDisconnect}
+                        aria-label='Disconnect PagerDuty account'
                         title='Disconnect PagerDuty'
                         style={{
                             backgroundColor: 'transparent',
@@ -546,6 +626,8 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             {!showBackButton && (
                 <div
                     className='pagerduty-tab-bar'
+                    role='tablist'
+                    aria-label='PagerDuty views'
                     style={{
                         display: 'flex',
                         borderBottom: `1px solid ${theme.centerChannelColor}20`,
@@ -556,6 +638,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             key={tab.key}
                             className={`pagerduty-tab ${activeTab === tab.key ? 'active' : ''}`}
                             data-testid={`tab-${tab.key}`}
+                            role='tab'
+                            aria-selected={activeTab === tab.key}
+                            aria-controls={`tabpanel-${tab.key}`}
+                            id={`tab-${tab.key}`}
                             onClick={() => handleTabChange(tab.key)}
                             style={{
                                 flex: 1,
@@ -581,6 +667,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             {pagingSuccess && (
                 <div
                     className='success-message'
+                    role='status'
                     style={{
                         backgroundColor: theme.onlineIndicator || '#28a745',
                         color: 'white',
@@ -593,7 +680,12 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             )}
 
             {/* Tab Content */}
-            <div style={{flex: 1, overflow: 'auto', padding: '16px'}}>
+            <div
+                id={`tabpanel-${activeTab}`}
+                role='tabpanel'
+                aria-labelledby={`tab-${activeTab}`}
+                style={{flex: 1, overflow: 'auto', padding: '16px'}}
+            >
                 {/* On-Call Tab */}
                 {activeTab === 'oncall' && (
                     <OnCallList
@@ -602,6 +694,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         loading={loading}
                         error={error}
                         onPageUser={handlePageUser}
+                        onRetry={handleRetry}
                     />
                 )}
 
@@ -621,6 +714,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             theme={theme}
                             loading={loading}
                             error={error}
+                            onRetry={handleRetry}
                         />
                     )
                 )}
@@ -657,6 +751,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             filters={incidentFilters}
                             onFiltersChange={handleIncidentFiltersChange}
                             userScheduleMap={userScheduleMap}
+                            onRetry={handleRetry}
                         />
                     )
                 )}

@@ -12,6 +12,14 @@ import (
 	"github.com/svelle/mattermost-pagerduty-plugin/server/store/kvstore"
 )
 
+var (
+	// ErrNotConnected indicates the user has not connected their PagerDuty account.
+	ErrNotConnected = errors.New("not connected to PagerDuty")
+
+	// ErrTokenExpired indicates the user's OAuth token has expired and could not be refreshed.
+	ErrTokenExpired = errors.New("PagerDuty session expired, please reconnect")
+)
+
 // Plugin implements the interface expected by the Mattermost server to communicate between the server and plugin processes.
 type Plugin struct {
 	plugin.MattermostPlugin
@@ -83,14 +91,14 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 		return nil, errors.Wrap(err, "failed to retrieve user token")
 	}
 	if token == nil {
-		return nil, fmt.Errorf("not connected to PagerDuty")
+		return nil, ErrNotConnected
 	}
 
 	if token.IsExpired() {
 		p.client.Log.Debug("OAuth token expired, attempting refresh", "user_id", userID)
 		token, err = p.refreshUserToken(userID, token)
 		if err != nil {
-			return nil, fmt.Errorf("PagerDuty session expired, please reconnect: %w", err)
+			return nil, fmt.Errorf("%w: %v", ErrTokenExpired, err)
 		}
 	}
 

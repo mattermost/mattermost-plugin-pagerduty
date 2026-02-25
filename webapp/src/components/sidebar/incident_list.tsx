@@ -19,6 +19,7 @@ interface Props {
     filters: IncidentFilters;
     onFiltersChange: (filters: IncidentFilters) => void;
     userScheduleMap: Record<string, string>;
+    onRetry?: () => void;
 }
 
 const formatTimeAgo = (dateString: string): string => {
@@ -67,7 +68,25 @@ const getStatusLabel = (status: string): string => {
     }
 };
 
-const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onIncidentClick, onAcknowledge, onResolve, schedules, users, filters, onFiltersChange, userScheduleMap}) => {
+const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
+    <div aria-busy='true'>
+        {[1, 2, 3].map((i) => (
+            <div
+                key={i}
+                className='skeleton-item'
+                style={{
+                    height: '80px',
+                    borderRadius: '8px',
+                    marginBottom: '10px',
+                    backgroundColor: theme.centerChannelColor + '10',
+                    animation: 'pagerduty-skeleton-pulse 1.5s ease-in-out infinite',
+                }}
+            />
+        ))}
+    </div>
+);
+
+const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onIncidentClick, onAcknowledge, onResolve, schedules, users, filters, onFiltersChange, userScheduleMap, onRetry}) => {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     const hasActiveFilters = Boolean(filters.scheduleId || (filters.userIds && filters.userIds.length > 0));
@@ -111,6 +130,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                     scheduleId: e.target.value || undefined,
                 })}
                 style={selectStyle}
+                aria-label='Filter by schedule'
             >
                 <option value=''>{'All Schedules'}</option>
                 {schedules.map((s) => (
@@ -130,6 +150,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                     userIds: e.target.value ? [e.target.value] : undefined,
                 })}
                 style={selectStyle}
+                aria-label='Filter by responder'
             >
                 <option value=''>{'All Responders'}</option>
                 {users.map((u) => (
@@ -145,6 +166,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                 <button
                     className='incident-filter-clear'
                     onClick={() => onFiltersChange({})}
+                    aria-label='Clear all filters'
                     style={{
                         backgroundColor: 'transparent',
                         color: theme.linkColor,
@@ -165,9 +187,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
         return (
             <div>
                 {filterBar}
-                <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
-                    {'Loading incidents...'}
-                </div>
+                <LoadingSkeleton theme={theme}/>
             </div>
         );
     }
@@ -176,8 +196,31 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
         return (
             <div>
                 {filterBar}
-                <div style={{color: theme.errorTextColor, fontSize: '14px'}}>
+                <div
+                    role='alert'
+                    style={{color: theme.errorTextColor, fontSize: '14px'}}
+                >
                     {`Error: ${error}`}
+                    {onRetry && (
+                        <button
+                            className='retry-button'
+                            onClick={onRetry}
+                            aria-label='Retry loading incidents'
+                            style={{
+                                display: 'block',
+                                marginTop: '8px',
+                                backgroundColor: 'transparent',
+                                color: theme.linkColor,
+                                border: `1px solid ${theme.linkColor}`,
+                                borderRadius: '4px',
+                                padding: '4px 12px',
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {'Retry'}
+                        </button>
+                    )}
                 </div>
             </div>
         );
@@ -187,8 +230,8 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
         return (
             <div>
                 {filterBar}
-                <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
-                    {hasActiveFilters ? 'No incidents match the selected filters' : 'No active incidents'}
+                <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px', textAlign: 'center', padding: '24px 16px'}}>
+                    {hasActiveFilters ? 'No incidents match the selected filters.' : 'No active incidents \u2014 all clear!'}
                 </div>
             </div>
         );
@@ -238,6 +281,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px'}}>
                             <span
                                 className='incident-status-badge'
+                                aria-label={`Status: ${getStatusLabel(incident.status || '')}`}
                                 style={{
                                     fontSize: '10px',
                                     fontWeight: 600,
@@ -276,7 +320,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                             )}
                             {scheduleName && (
                                 <span>
-                                    {incident.service?.summary ? '·' : ''}
+                                    {incident.service?.summary ? '\u00B7' : ''}
                                     {` ${scheduleName}`}
                                 </span>
                             )}
@@ -288,6 +332,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                                     className='incident-ack-button'
                                     disabled={isLoading}
                                     onClick={(e) => handleAction(e, incident.id, onAcknowledge)}
+                                    aria-label={`Acknowledge incident: ${incident.title}`}
                                     style={{
                                         backgroundColor: theme.awayIndicator || '#ffbc42',
                                         color: '#1e1e1e',
@@ -308,6 +353,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                                     className='incident-resolve-button'
                                     disabled={isLoading}
                                     onClick={(e) => handleAction(e, incident.id, onResolve)}
+                                    aria-label={`Resolve incident: ${incident.title}`}
                                     style={{
                                         backgroundColor: theme.onlineIndicator || '#06d6a0',
                                         color: 'white',

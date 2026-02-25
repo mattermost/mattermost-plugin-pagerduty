@@ -80,7 +80,7 @@ describe('ScheduleDetails', () => {
             />,
         );
 
-        expect(screen.getByText('Loading schedule details...')).toBeInTheDocument();
+        expect(screen.getByText((_, el) => el?.getAttribute('aria-busy') === 'true')).toBeInTheDocument();
     });
 
     it('should render on-call entries', () => {

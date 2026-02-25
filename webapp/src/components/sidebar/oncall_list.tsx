@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React from 'react';
+import React, {useState} from 'react';
 
 import type {OnCall, User} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
@@ -12,29 +12,69 @@ interface Props {
     loading: boolean;
     error: string | null;
     onPageUser?: (user: User) => void;
+    onRetry?: () => void;
 }
 
-const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser}) => {
+const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
+    <div aria-busy='true'>
+        {[1, 2, 3].map((i) => (
+            <div
+                key={i}
+                className='skeleton-item'
+                style={{
+                    height: '56px',
+                    borderRadius: '4px',
+                    marginBottom: '8px',
+                    backgroundColor: theme.centerChannelColor + '10',
+                    animation: 'pagerduty-skeleton-pulse 1.5s ease-in-out infinite',
+                }}
+            />
+        ))}
+    </div>
+);
+
+const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser, onRetry}) => {
+    const [searchQuery, setSearchQuery] = useState('');
+
     if (loading) {
-        return (
-            <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
-                {'Loading on-call users...'}
-            </div>
-        );
+        return <LoadingSkeleton theme={theme}/>;
     }
 
     if (error) {
         return (
-            <div style={{color: theme.errorTextColor, fontSize: '14px'}}>
+            <div
+                role='alert'
+                style={{color: theme.errorTextColor, fontSize: '14px'}}
+            >
                 {`Error: ${error}`}
+                {onRetry && (
+                    <button
+                        className='retry-button'
+                        onClick={onRetry}
+                        aria-label='Retry loading on-call users'
+                        style={{
+                            display: 'block',
+                            marginTop: '8px',
+                            backgroundColor: 'transparent',
+                            color: theme.linkColor,
+                            border: `1px solid ${theme.linkColor}`,
+                            borderRadius: '4px',
+                            padding: '4px 12px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {'Retry'}
+                    </button>
+                )}
             </div>
         );
     }
 
     if (!onCalls || onCalls.length === 0) {
         return (
-            <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
-                {'No one is currently on-call'}
+            <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px', textAlign: 'center', padding: '24px 16px'}}>
+                <div style={{fontSize: '24px', marginBottom: '8px'}}>{'No one is currently on-call across your schedules.'}</div>
             </div>
         );
     }
@@ -49,6 +89,23 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
         return acc;
     }, {} as Record<string, OnCall[]>);
 
+    // Filter by search query
+    const filteredEntries = Object.entries(oncallsBySchedule).filter(([scheduleName, scheduleOncalls]) => {
+        if (!searchQuery) {
+            return true;
+        }
+        const query = searchQuery.toLowerCase();
+        if (scheduleName.toLowerCase().includes(query)) {
+            return true;
+        }
+        return scheduleOncalls.some((oc) =>
+            oc.user.name?.toLowerCase().includes(query) ||
+            oc.user.email?.toLowerCase().includes(query),
+        );
+    });
+
+    const showSearch = Object.keys(oncallsBySchedule).length > 5;
+
     return (
         <div className='oncall-list'>
             <div
@@ -61,7 +118,32 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
             >
                 {'Currently On-Call'}
             </div>
-            {Object.entries(oncallsBySchedule).map(([scheduleName, scheduleOncalls]) => (
+            {showSearch && (
+                <input
+                    type='text'
+                    placeholder='Search on-call users...'
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label='Search on-call users'
+                    style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        marginBottom: '12px',
+                        border: `1px solid ${theme.centerChannelColor}20`,
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        backgroundColor: theme.centerChannelBg,
+                        color: theme.centerChannelColor,
+                        boxSizing: 'border-box',
+                    }}
+                />
+            )}
+            {filteredEntries.length === 0 && searchQuery && (
+                <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
+                    {'No on-call users match your search.'}
+                </div>
+            )}
+            {filteredEntries.map(([scheduleName, scheduleOncalls]) => (
                 <div
                     key={scheduleName}
                     style={{marginBottom: '16px'}}
@@ -122,6 +204,7 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
                                         e.stopPropagation();
                                         onPageUser(oncall.user);
                                     }}
+                                    aria-label={`Page ${oncall.user.name}`}
                                     style={{
                                         backgroundColor: theme.buttonBg,
                                         color: theme.buttonColor,

@@ -4,6 +4,8 @@
 import manifest from '@/manifest';
 import type {ConnectionStatus, IncidentFilters} from '@/types/pagerduty';
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 export class Client {
     private baseUrl: string;
 
@@ -13,20 +15,45 @@ export class Client {
         this.baseUrl = `${siteUrl}/plugins/${manifest.id}/api/v1`;
     }
 
-    async getConnectionStatus(): Promise<ConnectionStatus> {
-        const response = await fetch(`${this.baseUrl}/oauth/status`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
+    private async doFetch(url: string, options: RequestInit = {}): Promise<Response> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to check connection status');
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                ...options,
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                let message: string;
+                try {
+                    const error = await response.json();
+                    message = error.message || `Request failed (${response.status})`;
+                } catch {
+                    message = response.statusText || `Request failed (${response.status})`;
+                }
+                throw new Error(message);
+            }
+
+            return response;
+        } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                throw new Error('Request timed out');
+            }
+            throw err;
+        } finally {
+            clearTimeout(timeoutId);
         }
+    }
 
+    async getConnectionStatus(): Promise<ConnectionStatus> {
+        const response = await this.doFetch(`${this.baseUrl}/oauth/status`);
         return response.json();
     }
 
@@ -35,86 +62,29 @@ export class Client {
     }
 
     async disconnect(): Promise<void> {
-        const response = await fetch(`${this.baseUrl}/oauth/disconnect`, {
+        await this.doFetch(`${this.baseUrl}/oauth/disconnect`, {
             method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to disconnect');
-        }
     }
 
     async getSchedules() {
-        const response = await fetch(`${this.baseUrl}/schedules`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch schedules');
-        }
-
+        const response = await this.doFetch(`${this.baseUrl}/schedules`);
         return response.json();
     }
 
     async getOnCalls(scheduleId?: string) {
         const params = scheduleId ? `?schedule_id=${scheduleId}` : '';
-        const response = await fetch(`${this.baseUrl}/oncalls${params}`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch on-calls');
-        }
-
+        const response = await this.doFetch(`${this.baseUrl}/oncalls${params}`);
         return response.json();
     }
 
     async getScheduleDetails(scheduleId: string) {
-        const response = await fetch(`${this.baseUrl}/schedule?id=${scheduleId}`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch schedule details');
-        }
-
+        const response = await this.doFetch(`${this.baseUrl}/schedule?id=${scheduleId}`);
         return response.json();
     }
 
     async getServices() {
-        const response = await fetch(`${this.baseUrl}/services`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch services');
-        }
-
+        const response = await this.doFetch(`${this.baseUrl}/services`);
         return response.json();
     }
 
@@ -126,19 +96,10 @@ export class Client {
             assignee_ids: assigneeIds || [],
         };
 
-        const response = await fetch(`${this.baseUrl}/incidents`, {
+        const response = await this.doFetch(`${this.baseUrl}/incidents`, {
             method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify(body),
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to create incident');
-        }
 
         return response.json();
     }
@@ -156,71 +117,29 @@ export class Client {
             `${this.baseUrl}/incidents?${queryString}` :
             `${this.baseUrl}/incidents`;
 
-        const response = await fetch(url, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch incidents');
-        }
-
+        const response = await this.doFetch(url);
         return response.json();
     }
 
     async updateIncident(incidentId: string, status: string) {
-        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}`, {
+        const response = await this.doFetch(`${this.baseUrl}/incidents/${incidentId}`, {
             method: 'PUT',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify({status}),
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to update incident');
-        }
 
         return response.json();
     }
 
     async getIncidentNotes(incidentId: string) {
-        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}/notes`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch incident notes');
-        }
-
+        const response = await this.doFetch(`${this.baseUrl}/incidents/${incidentId}/notes`);
         return response.json();
     }
 
     async createIncidentNote(incidentId: string, content: string) {
-        const response = await fetch(`${this.baseUrl}/incidents/${incidentId}/notes`, {
+        const response = await this.doFetch(`${this.baseUrl}/incidents/${incidentId}/notes`, {
             method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify({content}),
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to create incident note');
-        }
 
         return response.json();
     }

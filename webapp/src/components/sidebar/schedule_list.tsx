@@ -12,10 +12,30 @@ interface Props {
     theme: Theme;
     loading: boolean;
     error: string | null;
+    onRetry?: () => void;
 }
 
-const ScheduleList: React.FC<Props> = ({schedules, onScheduleClick, theme, loading, error}) => {
+const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
+    <div aria-busy='true'>
+        {[1, 2, 3].map((i) => (
+            <div
+                key={i}
+                className='skeleton-item'
+                style={{
+                    height: '68px',
+                    borderRadius: '4px',
+                    marginBottom: '8px',
+                    backgroundColor: theme.centerChannelColor + '10',
+                    animation: 'pagerduty-skeleton-pulse 1.5s ease-in-out infinite',
+                }}
+            />
+        ))}
+    </div>
+);
+
+const ScheduleList: React.FC<Props> = ({schedules, onScheduleClick, theme, loading, error, onRetry}) => {
     const [focusedIndex, setFocusedIndex] = useState(-1);
+    const [searchQuery, setSearchQuery] = useState('');
     const scheduleRefs = useRef<Array<HTMLDivElement | null>>([]);
 
     useEffect(() => {
@@ -23,56 +43,109 @@ const ScheduleList: React.FC<Props> = ({schedules, onScheduleClick, theme, loadi
         scheduleRefs.current = scheduleRefs.current.slice(0, schedules.length);
     }, [schedules.length]);
 
+    const filteredSchedules = searchQuery
+        ? schedules.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        : schedules;
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            const nextIndex = focusedIndex < schedules.length - 1 ? focusedIndex + 1 : 0;
+            const nextIndex = focusedIndex < filteredSchedules.length - 1 ? focusedIndex + 1 : 0;
             setFocusedIndex(nextIndex);
             scheduleRefs.current[nextIndex]?.focus();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            const prevIndex = focusedIndex > 0 ? focusedIndex - 1 : schedules.length - 1;
+            const prevIndex = focusedIndex > 0 ? focusedIndex - 1 : filteredSchedules.length - 1;
             setFocusedIndex(prevIndex);
             scheduleRefs.current[prevIndex]?.focus();
         } else if (e.key === 'Enter' && focusedIndex >= 0) {
             e.preventDefault();
-            onScheduleClick(schedules[focusedIndex].id);
+            onScheduleClick(filteredSchedules[focusedIndex].id);
         }
     };
 
     if (loading) {
-        return (
-            <div style={{color: theme.centerChannelColor, fontSize: '14px'}}>
-                {'Loading schedules...'}
-            </div>
-        );
+        return <LoadingSkeleton theme={theme}/>;
     }
 
     if (error) {
         return (
-            <div style={{color: theme.errorTextColor, fontSize: '14px'}}>
+            <div
+                role='alert'
+                style={{color: theme.errorTextColor, fontSize: '14px'}}
+            >
                 {`Error: ${error}`}
+                {onRetry && (
+                    <button
+                        className='retry-button'
+                        onClick={onRetry}
+                        aria-label='Retry loading schedules'
+                        style={{
+                            display: 'block',
+                            marginTop: '8px',
+                            backgroundColor: 'transparent',
+                            color: theme.linkColor,
+                            border: `1px solid ${theme.linkColor}`,
+                            borderRadius: '4px',
+                            padding: '4px 12px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {'Retry'}
+                    </button>
+                )}
             </div>
         );
     }
 
     if (schedules.length === 0) {
         return (
-            <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
-                {'No schedules found'}
+            <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px', textAlign: 'center', padding: '24px 16px'}}>
+                {'No schedules found. Verify your PagerDuty configuration.'}
             </div>
         );
     }
+
+    const showSearch = schedules.length > 5;
 
     return (
         <div
             className='schedule-list'
             onKeyDown={handleKeyDown}
         >
+            {showSearch && (
+                <input
+                    type='text'
+                    placeholder='Search schedules...'
+                    value={searchQuery}
+                    onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setFocusedIndex(-1);
+                    }}
+                    aria-label='Search schedules'
+                    style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        marginBottom: '12px',
+                        border: `1px solid ${theme.centerChannelColor}20`,
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        backgroundColor: theme.centerChannelBg,
+                        color: theme.centerChannelColor,
+                        boxSizing: 'border-box',
+                    }}
+                />
+            )}
             <div style={{marginBottom: '12px', color: theme.centerChannelColor, fontSize: '14px', opacity: 0.7}}>
-                {`${schedules.length} schedule${schedules.length === 1 ? '' : 's'}`}
+                {`${filteredSchedules.length} schedule${filteredSchedules.length === 1 ? '' : 's'}`}
             </div>
-            {schedules.map((schedule, index) => (
+            {filteredSchedules.length === 0 && searchQuery && (
+                <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
+                    {'No schedules match your search.'}
+                </div>
+            )}
+            {filteredSchedules.map((schedule, index) => (
                 <div
                     key={schedule.id}
                     ref={(el) => {
@@ -80,6 +153,8 @@ const ScheduleList: React.FC<Props> = ({schedules, onScheduleClick, theme, loadi
                     }}
                     data-testid={`schedule-${schedule.id}`}
                     tabIndex={0}
+                    role='button'
+                    aria-label={`View schedule: ${schedule.name}`}
                     onClick={() => onScheduleClick(schedule.id)}
                     onFocus={() => setFocusedIndex(index)}
                     style={{

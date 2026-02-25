@@ -58,7 +58,7 @@ describe('ScheduleList', () => {
             />,
         );
 
-        expect(screen.getByText('Loading schedules...')).toBeInTheDocument();
+        expect(screen.getByText((_, el) => el?.getAttribute('aria-busy') === 'true')).toBeInTheDocument();
     });
 
     it('should show error state', () => {
@@ -86,7 +86,7 @@ describe('ScheduleList', () => {
             />,
         );
 
-        expect(screen.getByText('No schedules found')).toBeInTheDocument();
+        expect(screen.getByText('No schedules found. Verify your PagerDuty configuration.')).toBeInTheDocument();
     });
 
     it('should call onScheduleClick when schedule is clicked', () => {
