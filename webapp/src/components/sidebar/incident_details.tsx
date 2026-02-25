@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 
 import client from '@/client/client';
 import type {Incident, IncidentNote} from '@/types/pagerduty';
@@ -53,6 +53,15 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (incident) {
@@ -86,7 +95,10 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
             const response = await client.updateIncident(incident.id, 'acknowledged');
             onIncidentUpdated(response.incident);
             setSuccessMessage('Incident acknowledged');
-            setTimeout(() => setSuccessMessage(null), 3000);
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to acknowledge');
         } finally {
@@ -104,7 +116,10 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
             const response = await client.updateIncident(incident.id, 'resolved');
             onIncidentUpdated(response.incident);
             setSuccessMessage('Incident resolved');
-            setTimeout(() => setSuccessMessage(null), 3000);
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to resolve');
         } finally {
@@ -124,7 +139,10 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
             setNotes((prev) => [...prev, response.note]);
             setNoteContent('');
             setSuccessMessage('Note added');
-            setTimeout(() => setSuccessMessage(null), 3000);
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to add note');
         } finally {
@@ -150,6 +168,7 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
             {successMessage && (
                 <div
                     className='success-message'
+                    role='status'
                     style={{
                         backgroundColor: theme.onlineIndicator || '#28a745',
                         color: 'white',
@@ -165,6 +184,7 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
 
             {error && (
                 <div
+                    role='alert'
                     style={{
                         backgroundColor: '#d24b4720',
                         color: '#d24b47',
@@ -183,6 +203,7 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
             <div style={{marginBottom: '16px'}}>
                 <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
                     <span
+                        aria-label={`Status: ${getStatusLabel(incident.status || '')}`}
                         style={{
                             fontSize: '10px',
                             fontWeight: 600,
@@ -250,6 +271,7 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
                         className='incident-ack-button'
                         disabled={actionLoading !== null}
                         onClick={handleAcknowledge}
+                        aria-label='Acknowledge this incident'
                         style={{
                             backgroundColor: theme.awayIndicator || '#ffbc42',
                             color: '#1e1e1e',
@@ -270,6 +292,7 @@ const IncidentDetails: React.FC<Props> = ({incident, theme, onIncidentUpdated}) 
                         className='incident-resolve-button'
                         disabled={actionLoading !== null}
                         onClick={handleResolve}
+                        aria-label='Resolve this incident'
                         style={{
                             backgroundColor: theme.onlineIndicator || '#06d6a0',
                             color: 'white',

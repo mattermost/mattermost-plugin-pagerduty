@@ -84,7 +84,7 @@ describe('OnCallList', () => {
             />,
         );
 
-        expect(screen.getByText('Loading on-call users...')).toBeInTheDocument();
+        expect(screen.getByText((_, el) => el?.getAttribute('aria-busy') === 'true')).toBeInTheDocument();
     });
 
     it('should show error state', () => {
@@ -110,7 +110,7 @@ describe('OnCallList', () => {
             />,
         );
 
-        expect(screen.getByText('No one is currently on-call')).toBeInTheDocument();
+        expect(screen.getByText('No one is currently on-call across your schedules.')).toBeInTheDocument();
     });
 
     it('should display schedule names', () => {

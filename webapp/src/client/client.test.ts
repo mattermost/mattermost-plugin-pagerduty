@@ -38,13 +38,13 @@ describe('Client', () => {
 
             const result = await client.getSchedules();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedules', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedules', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockSchedules);
         });
 
@@ -85,13 +85,13 @@ describe('Client', () => {
 
             const result = await client.getOnCalls();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockOnCalls);
         });
 
@@ -105,13 +105,13 @@ describe('Client', () => {
 
             const result = await client.getOnCalls('SCHED1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls?schedule_id=SCHED1', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls?schedule_id=SCHED1', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockOnCalls);
         });
     });
@@ -142,13 +142,13 @@ describe('Client', () => {
 
             const result = await client.getScheduleDetails('SCHED1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedule?id=SCHED1', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedule?id=SCHED1', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockSchedule);
         });
 
@@ -177,13 +177,13 @@ describe('Client', () => {
 
             const result = await client.getIncidents();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockIncidents);
         });
 
@@ -226,14 +226,14 @@ describe('Client', () => {
 
             const result = await client.updateIncident('INC1', 'acknowledged');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1', expect.objectContaining({
                 method: 'PUT',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({status: 'acknowledged'}),
-            });
+            }));
             expect(result).toEqual(mockResponse);
         });
 
@@ -262,13 +262,13 @@ describe('Client', () => {
 
             const result = await client.getIncidentNotes('INC1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockNotes);
         });
     });
@@ -286,14 +286,14 @@ describe('Client', () => {
 
             const result = await client.createIncidentNote('INC1', 'Root cause identified');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({content: 'Root cause identified'}),
-            });
+            }));
             expect(result).toEqual(mockResponse);
         });
 
@@ -318,13 +318,13 @@ describe('Client', () => {
 
             const result = await client.getConnectionStatus();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/status', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/status', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
             expect(result).toEqual(mockStatus);
         });
 
@@ -365,13 +365,13 @@ describe('Client', () => {
 
             await client.disconnect();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/disconnect', {
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/disconnect', expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-            });
+            }));
         });
 
         it('should throw error on failed response', async () => {

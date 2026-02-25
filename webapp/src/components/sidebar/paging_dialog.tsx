@@ -24,6 +24,17 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
     const [error, setError] = useState<string | null>(null);
     const [loadingServices, setLoadingServices] = useState(true);
 
+    // Close on Escape key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
+
     // Load services on mount
     useEffect(() => {
         const fetchServices = async () => {
@@ -175,6 +186,9 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
 
     return (
         <div
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='paging-dialog-title'
             style={dialogStyle}
             onClick={onClose}
         >
@@ -182,7 +196,10 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
                 style={contentStyle}
                 onClick={(e) => e.stopPropagation()}
             >
-                <h2 style={headerStyle}>
+                <h2
+                    id='paging-dialog-title'
+                    style={headerStyle}
+                >
                     {actionText}{': '}{targetDisplayName}
                 </h2>
 

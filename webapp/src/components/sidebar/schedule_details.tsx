@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 
 import {PagingDialog} from './paging_dialog';
 
@@ -19,6 +19,17 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
     const [showPagingDialog, setShowPagingDialog] = useState(false);
     const [pagingTarget, setPagingTarget] = useState<{type: 'schedule' | 'user'; target: Schedule | User} | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    const entries = schedule?.final_schedule?.rendered_schedule_entries || [];
 
     const getCurrentOnCallUser = (): User | null => {
         const now = new Date();
@@ -84,7 +95,10 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
         setPagingTarget(null);
 
         // Clear success message after 5 seconds
-        setTimeout(() => setSuccessMessage(null), 5000);
+        if (successTimeoutRef.current) {
+            clearTimeout(successTimeoutRef.current);
+        }
+        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
     };
 
     const handleClosePagingDialog = () => {
@@ -94,8 +108,23 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
 
     if (loading) {
         return (
-            <div style={{padding: '20px', color: theme.centerChannelColor}}>
-                {'Loading schedule details...'}
+            <div
+                style={{padding: '20px', color: theme.centerChannelColor}}
+                aria-busy='true'
+            >
+                {[1, 2, 3].map((i) => (
+                    <div
+                        key={i}
+                        className='skeleton-item'
+                        style={{
+                            height: '72px',
+                            borderRadius: '8px',
+                            marginBottom: '12px',
+                            backgroundColor: theme.centerChannelColor + '10',
+                            animation: 'pagerduty-skeleton-pulse 1.5s ease-in-out infinite',
+                        }}
+                    />
+                ))}
             </div>
         );
     }
@@ -108,8 +137,6 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
         );
     }
 
-    const entries = schedule.final_schedule?.rendered_schedule_entries || [];
-
     return (
         <div
             className='schedule-details-container'
@@ -118,6 +145,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
             {successMessage && (
                 <div
                     className='success-message'
+                    role='status'
                     style={{
                         backgroundColor: theme.onlineIndicator || '#28a745',
                         color: 'white',
@@ -285,6 +313,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
                                     <button
                                         className='page-button'
                                         onClick={handlePageSchedule}
+                                        aria-label={`Page ${entry.user.name || entry.user.summary}`}
                                         style={{
                                             backgroundColor: theme.buttonBg,
                                             color: theme.buttonColor,

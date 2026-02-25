@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	stderrors "errors"
+
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 
@@ -18,22 +20,21 @@ func (p *Plugin) handleGetPagerDutyClient(w http.ResponseWriter, r *http.Request
 	userID := r.Header.Get("Mattermost-User-ID")
 	pdClient, err := p.getPagerDutyClientForUser(userID)
 	if err != nil {
-		errMsg := err.Error()
 		statusCode := http.StatusInternalServerError
 		errID := "api.pagerduty.auth.error"
 
-		if strings.Contains(errMsg, "not connected") {
+		if stderrors.Is(err, ErrNotConnected) {
 			statusCode = http.StatusUnauthorized
 			errID = "api.pagerduty.not_connected"
-		} else if strings.Contains(errMsg, "reconnect") {
+		} else if stderrors.Is(err, ErrTokenExpired) {
 			statusCode = http.StatusUnauthorized
 			errID = "api.pagerduty.token_expired"
 		}
 
-		p.client.Log.Warn("Failed to get PagerDuty client for user", "user_id", userID, "error", errMsg)
+		p.client.Log.Warn("Failed to get PagerDuty client for user", "user_id", userID, "error", err.Error())
 		p.handleError(w, r, &APIError{
 			ID:         errID,
-			Message:    errMsg,
+			Message:    err.Error(),
 			StatusCode: statusCode,
 		})
 		return nil
@@ -183,14 +184,7 @@ type CreateIncidentRequest struct {
 func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleCreateIncident called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	if r.Method != http.MethodPost {
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.incident.method.invalid",
-			Message:    "Method not allowed",
-			StatusCode: http.StatusMethodNotAllowed,
-		})
-		return
-	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
 
 	var req CreateIncidentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -360,6 +354,8 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+
 	var req UpdateIncidentAPIRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		p.handleError(w, r, &APIError{
@@ -469,6 +465,8 @@ func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
 
 	var req CreateIncidentNoteAPIRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

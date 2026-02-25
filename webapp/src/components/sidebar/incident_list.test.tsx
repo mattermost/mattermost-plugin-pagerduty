@@ -57,7 +57,7 @@ describe('IncidentList', () => {
             />,
         );
 
-        expect(screen.getByText('Loading incidents...')).toBeTruthy();
+        expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
     });
 
     it('should render error state', () => {
@@ -80,7 +80,7 @@ describe('IncidentList', () => {
             />,
         );
 
-        expect(screen.getByText('No active incidents')).toBeTruthy();
+        expect(screen.getByText(/No active incidents/)).toBeTruthy();
     });
 
     it('should render incidents with titles and services', () => {
