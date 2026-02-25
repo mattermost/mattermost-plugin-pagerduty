@@ -21,6 +21,7 @@ type configuration struct {
 	OAuthClientID     string `json:"OAuthClientID"`
 	OAuthClientSecret string `json:"OAuthClientSecret"`
 	APIBaseURL        string `json:"APIBaseURL"`
+	WebhookSecret     string `json:"WebhookSecret"`
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if

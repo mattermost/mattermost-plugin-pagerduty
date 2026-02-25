@@ -9,6 +9,7 @@ import (
 	stderrors "errors"
 
 	"github.com/gorilla/mux"
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/pkg/errors"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
@@ -639,5 +640,259 @@ func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		p.client.Log.Error("Failed to encode create incident note response", "error", err.Error())
+	}
+}
+
+// --- Subscription Management Handlers ---
+
+// SubscriptionAPIRequest represents the API request body for creating a subscription.
+type SubscriptionAPIRequest struct {
+	ChannelID  string   `json:"channel_id"`
+	EventTypes []string `json:"event_types"`
+	ServiceIDs []string `json:"service_ids,omitempty"`
+}
+
+func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) {
+	channelID := r.URL.Query().Get("channel_id")
+
+	if channelID != "" {
+		// Get subscription for a specific channel
+		sub, err := p.kvstore.GetChannelSubscription(channelID)
+		if err != nil {
+			p.handleError(w, r, &APIError{
+				ID:         "api.pagerduty.subscriptions.error",
+				Message:    "Failed to retrieve subscription",
+				StatusCode: http.StatusInternalServerError,
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if sub == nil {
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": nil}); err != nil {
+				p.client.Log.Error("Failed to encode null subscription", "error", err.Error())
+			}
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": sub}); err != nil {
+			p.client.Log.Error("Failed to encode subscription response", "error", err.Error())
+		}
+		return
+	}
+
+	// Get all subscriptions
+	index, err := p.kvstore.GetSubscriptionIndex()
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscriptions.error",
+			Message:    "Failed to retrieve subscriptions",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	var subs []*ChannelSubscription
+	for _, chID := range index {
+		sub, subErr := p.kvstore.GetChannelSubscription(chID)
+		if subErr != nil || sub == nil {
+			continue
+		}
+		subs = append(subs, sub)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscriptions": subs}); err != nil {
+		p.client.Log.Error("Failed to encode subscriptions response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req SubscriptionAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.ChannelID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.channel.missing",
+			Message:    "Channel ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	eventTypes := req.EventTypes
+	if len(eventTypes) == 0 {
+		eventTypes = AllEventTypes
+	}
+
+	sub := &ChannelSubscription{
+		ChannelID:  req.ChannelID,
+		CreatorID:  userID,
+		EventTypes: eventTypes,
+		ServiceIDs: req.ServiceIDs,
+		CreatedAt:  time.Now(),
+	}
+
+	if err := p.saveSubscription(sub); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.create.error",
+			Message:    "Failed to create subscription",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": sub}); err != nil {
+		p.client.Log.Error("Failed to encode subscription response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleDeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channelID := vars["channelId"]
+	if channelID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.channel.missing",
+			Message:    "Channel ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if err := p.removeSubscription(channelID); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.delete.error",
+			Message:    "Failed to delete subscription",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"ok": true}); err != nil {
+		p.client.Log.Error("Failed to encode delete response", "error", err.Error())
+	}
+}
+
+// --- Webhook Management Handlers ---
+
+func (p *Plugin) handleWebhookSetup(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
+	if !p.isUserSystemAdmin(userID) {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.forbidden",
+			Message:    "Only system administrators can manage webhooks",
+			StatusCode: http.StatusForbidden,
+		})
+		return
+	}
+
+	resp, _ := p.executeWebhookSetup(&model.CommandArgs{UserId: userID})
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"message": resp.Text}); err != nil {
+		p.client.Log.Error("Failed to encode webhook setup response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleWebhookTeardown(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
+	if !p.isUserSystemAdmin(userID) {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.forbidden",
+			Message:    "Only system administrators can manage webhooks",
+			StatusCode: http.StatusForbidden,
+		})
+		return
+	}
+
+	resp, _ := p.executeWebhookTeardown(&model.CommandArgs{UserId: userID})
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"message": resp.Text}); err != nil {
+		p.client.Log.Error("Failed to encode webhook teardown response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleWebhookStatus(w http.ResponseWriter, r *http.Request) {
+	reg, err := p.kvstore.GetWebhookRegistration()
+
+	status := map[string]interface{}{
+		"active": false,
+	}
+
+	if err == nil && reg != nil {
+		status["active"] = true
+		status["subscription_id"] = reg.SubscriptionID
+		status["created_by"] = reg.CreatedBy
+		status["created_at"] = reg.CreatedAt
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		p.client.Log.Error("Failed to encode webhook status response", "error", err.Error())
+	}
+}
+
+// --- Notification Preferences Handlers ---
+
+func (p *Plugin) handleGetNotificationPrefs(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
+	prefs, err := p.kvstore.GetUserNotificationPrefs(userID)
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.notification_prefs.error",
+			Message:    "Failed to retrieve notification preferences",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(prefs); err != nil {
+		p.client.Log.Error("Failed to encode notification prefs response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleSetNotificationPrefs(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var prefs UserNotificationPrefs
+	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.notification_prefs.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if err := p.kvstore.SetUserNotificationPrefs(userID, &prefs); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.notification_prefs.save.error",
+			Message:    "Failed to save notification preferences",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(prefs); err != nil {
+		p.client.Log.Error("Failed to encode notification prefs response", "error", err.Error())
 	}
 }

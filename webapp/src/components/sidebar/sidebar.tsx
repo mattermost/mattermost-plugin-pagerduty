@@ -5,16 +5,29 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import IncidentDetails from './incident_details';
 import IncidentList from './incident_list';
+import NotificationSettings from './notification_settings';
 import OnCallList from './oncall_list';
 import {PagingDialog} from './paging_dialog';
 import ScheduleDetails from './schedule_details';
 import ScheduleList from './schedule_list';
+import SubscriptionManager from './subscription_manager';
 
 import client from '@/client/client';
 import type {Incident, IncidentFilters, OnCall, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 type TabName = 'oncall' | 'schedules' | 'incidents';
+
+// Get the current channel ID from Mattermost's global Redux store
+const getCurrentChannelId = (): string => {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const state = (window as any).store?.getState();
+        return state?.entities?.channels?.currentChannelId || '';
+    } catch {
+        return '';
+    }
+};
 
 const REFRESH_INTERVAL_MS = 30000;
 const CONNECTION_POLL_INTERVAL_MS = 1000;
@@ -68,6 +81,9 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
+    // Settings view state: null = normal view, 'notifications' = notification prefs, 'subscriptions' = channel subscriptions
+    const [settingsView, setSettingsView] = useState<'notifications' | 'subscriptions' | null>(null);
 
     // Paging dialog state (shared between On-Call and Schedules tabs)
     const [showPagingDialog, setShowPagingDialog] = useState(false);
@@ -668,6 +684,34 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         </svg>
                     </button>
                     <button
+                        className='pagerduty-settings-button'
+                        onClick={() => setSettingsView(settingsView ? null : 'notifications')}
+                        aria-label='Settings'
+                        title='Settings'
+                        style={{
+                            backgroundColor: settingsView ? `${theme.buttonBg}20` : 'transparent',
+                            color: settingsView ? theme.buttonBg : theme.centerChannelColor,
+                            opacity: settingsView ? 1 : 0.6,
+                            border: 'none',
+                            padding: '4px 6px',
+                            cursor: 'pointer',
+                            lineHeight: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            borderRadius: '4px',
+                        }}
+                    >
+                        <svg
+                            width='14'
+                            height='14'
+                            viewBox='0 0 24 24'
+                            fill='currentColor'
+                            aria-hidden='true'
+                        >
+                            <path d='M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z'/>
+                        </svg>
+                    </button>
+                    <button
                         className='pagerduty-disconnect-button'
                         onClick={handleDisconnect}
                         aria-label='Disconnect PagerDuty account'
@@ -794,84 +838,106 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 aria-labelledby={`tab-${activeTab}`}
                 style={{flex: 1, overflow: 'auto', padding: '16px'}}
             >
-                {/* On-Call Tab */}
-                {activeTab === 'oncall' && (
-                    <OnCallList
-                        onCalls={filterMode === 'mine' && currentUser ?
-                            onCalls.filter((oc) => oc.user?.id === currentUser.id) :
-                            onCalls}
+                {/* Settings Views */}
+                {settingsView === 'notifications' && (
+                    <NotificationSettings
                         theme={theme}
-                        loading={loading}
-                        error={error}
-                        onPageUser={handlePageUser}
-                        onRetry={handleRetry}
+                        onBack={() => setSettingsView(null)}
+                        onOpenSubscriptions={() => setSettingsView('subscriptions')}
                     />
                 )}
 
-                {/* Schedules Tab */}
-                {activeTab === 'schedules' && (
-                    selectedSchedule || loadingDetails ? (
-                        <ScheduleDetails
-                            schedule={selectedSchedule}
-                            onBack={handleBack}
-                            theme={theme}
-                            loading={loadingDetails}
-                            currentUser={currentUser || undefined}
-                            onOverrideCreated={() => {
-                                if (selectedSchedule) {
-                                    handleScheduleClick(selectedSchedule.id);
-                                }
-                            }}
-                        />
-                    ) : (
-                        <ScheduleList
-                            schedules={filterMode === 'mine' && currentUser ?
-                                schedules.filter((s) => myScheduleIds.has(s.id)) :
-                                schedules}
-                            onScheduleClick={handleScheduleClick}
-                            theme={theme}
-                            loading={loading}
-                            error={error}
-                            onRetry={handleRetry}
-                        />
-                    )
+                {settingsView === 'subscriptions' && (
+                    <SubscriptionManager
+                        theme={theme}
+                        channelId={getCurrentChannelId()}
+                        onBack={() => setSettingsView('notifications')}
+                    />
                 )}
 
-                {/* Incidents Tab */}
-                {activeTab === 'incidents' && (
-                    selectedIncident ? (
-                        <div
-                            onFocus={() => {
-                                isInteractingRef.current = true;
-                            }}
-                            onBlur={() => {
-                                isInteractingRef.current = false;
-                            }}
-                        >
-                            <IncidentDetails
-                                incident={selectedIncident}
-                                onBack={handleBack}
+                {/* Normal Tab Content (hidden when settings view is active) */}
+                {!settingsView && (
+                    <>
+                        {/* On-Call Tab */}
+                        {activeTab === 'oncall' && (
+                            <OnCallList
+                                onCalls={filterMode === 'mine' && currentUser ?
+                                    onCalls.filter((oc) => oc.user?.id === currentUser.id) :
+                                    onCalls}
                                 theme={theme}
-                                onIncidentUpdated={handleIncidentUpdated}
+                                loading={loading}
+                                error={error}
+                                onPageUser={handlePageUser}
+                                onRetry={handleRetry}
                             />
-                        </div>
-                    ) : (
-                        <IncidentList
-                            incidents={incidents}
-                            theme={theme}
-                            loading={loading}
-                            error={error}
-                            onIncidentClick={handleIncidentClick}
-                            onAcknowledge={handleAcknowledge}
-                            onResolve={handleResolve}
-                            schedules={filterSchedules}
-                            users={filterUsers}
-                            filters={incidentFilters}
-                            onFiltersChange={handleIncidentFiltersChange}
-                            userScheduleMap={userScheduleMap}
-                            onRetry={handleRetry}
-                        />
-                    )
+                        )}
+
+                        {/* Schedules Tab */}
+                        {activeTab === 'schedules' && (
+                            selectedSchedule || loadingDetails ? (
+                                <ScheduleDetails
+                                    schedule={selectedSchedule}
+                                    onBack={handleBack}
+                                    theme={theme}
+                                    loading={loadingDetails}
+                                    currentUser={currentUser || undefined}
+                                    onOverrideCreated={() => {
+                                        if (selectedSchedule) {
+                                            handleScheduleClick(selectedSchedule.id);
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <ScheduleList
+                                    schedules={filterMode === 'mine' && currentUser ?
+                                        schedules.filter((s) => myScheduleIds.has(s.id)) :
+                                        schedules}
+                                    onScheduleClick={handleScheduleClick}
+                                    theme={theme}
+                                    loading={loading}
+                                    error={error}
+                                    onRetry={handleRetry}
+                                />
+                            )
+                        )}
+
+                        {/* Incidents Tab */}
+                        {activeTab === 'incidents' && (
+                            selectedIncident ? (
+                                <div
+                                    onFocus={() => {
+                                        isInteractingRef.current = true;
+                                    }}
+                                    onBlur={() => {
+                                        isInteractingRef.current = false;
+                                    }}
+                                >
+                                    <IncidentDetails
+                                        incident={selectedIncident}
+                                        onBack={handleBack}
+                                        theme={theme}
+                                        onIncidentUpdated={handleIncidentUpdated}
+                                    />
+                                </div>
+                            ) : (
+                                <IncidentList
+                                    incidents={incidents}
+                                    theme={theme}
+                                    loading={loading}
+                                    error={error}
+                                    onIncidentClick={handleIncidentClick}
+                                    onAcknowledge={handleAcknowledge}
+                                    onResolve={handleResolve}
+                                    schedules={filterSchedules}
+                                    users={filterUsers}
+                                    filters={incidentFilters}
+                                    onFiltersChange={handleIncidentFiltersChange}
+                                    userScheduleMap={userScheduleMap}
+                                    onRetry={handleRetry}
+                                />
+                            )
+                        )}
+                    </>
                 )}
             </div>
 

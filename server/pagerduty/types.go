@@ -1,6 +1,9 @@
 package pagerduty
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Schedule struct {
 	ID               string           `json:"id"`
@@ -276,4 +279,94 @@ type CreateOverrideRequest struct {
 // OverrideResponse wraps a single override response
 type OverrideResponse struct {
 	Override Override `json:"override"`
+}
+
+// --- Webhook V3 Types ---
+
+// WebhookPayload is the top-level structure of a PagerDuty V3 webhook event.
+type WebhookPayload struct {
+	Event WebhookEvent `json:"event"`
+}
+
+// WebhookEvent represents a single event in a PagerDuty V3 webhook payload.
+type WebhookEvent struct {
+	ID           string          `json:"id"`
+	EventType    string          `json:"event_type"`
+	ResourceType string          `json:"resource_type"`
+	OccurredAt   string          `json:"occurred_at"`
+	Data         json.RawMessage `json:"data"`
+}
+
+// WebhookIncidentData is the data payload for incident-related webhook events.
+type WebhookIncidentData struct {
+	ID          string           `json:"id"`
+	Type        string           `json:"type"`
+	Self        string           `json:"self"`
+	HTMLURL     string           `json:"html_url"`
+	Number      int              `json:"number"`
+	Status      string           `json:"status"`
+	Title       string           `json:"title"`
+	Urgency     string           `json:"urgency"`
+	Service     ServiceReference `json:"service"`
+	Assignees   []UserReference  `json:"assignees"`
+	Priority    *Priority        `json:"priority"`
+	CreatedAt   string           `json:"created_at"`
+	Description string           `json:"description"`
+}
+
+// --- Webhook Subscription Management Types ---
+
+// WebhookSubscriptionRequest is the request body for creating a webhook subscription.
+type WebhookSubscriptionRequest struct {
+	WebhookSubscription WebhookSubscriptionBody `json:"webhook_subscription"`
+}
+
+// WebhookSubscriptionBody describes the webhook subscription to create.
+type WebhookSubscriptionBody struct {
+	Type           string                `json:"type"`
+	DeliveryMethod WebhookDeliveryMethod `json:"delivery_method"`
+	Events         []string              `json:"events"`
+	Filter         WebhookFilter         `json:"filter"`
+	Description    string                `json:"description"`
+}
+
+// WebhookDeliveryMethod describes how to deliver webhook events.
+type WebhookDeliveryMethod struct {
+	Type          string          `json:"type"`
+	URL           string          `json:"url"`
+	CustomHeaders []WebhookHeader `json:"custom_headers,omitempty"`
+	Secret        string          `json:"secret,omitempty"`
+}
+
+// WebhookFilter scopes which events are sent to the webhook.
+type WebhookFilter struct {
+	Type string `json:"type"`
+	ID   string `json:"id,omitempty"`
+}
+
+// WebhookHeader is a custom header to include in webhook deliveries.
+type WebhookHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// WebhookSubscriptionResponse wraps the response from creating a webhook subscription.
+type WebhookSubscriptionResponse struct {
+	WebhookSubscription WebhookSubscriptionResult `json:"webhook_subscription"`
+}
+
+// WebhookSubscriptionsListResponse wraps the list of webhook subscriptions.
+type WebhookSubscriptionsListResponse struct {
+	WebhookSubscriptions []WebhookSubscriptionResult `json:"webhook_subscriptions"`
+}
+
+// WebhookSubscriptionResult is the response representation of a webhook subscription.
+type WebhookSubscriptionResult struct {
+	ID             string                `json:"id"`
+	Type           string                `json:"type"`
+	DeliveryMethod WebhookDeliveryMethod `json:"delivery_method"`
+	Events         []string              `json:"events"`
+	Filter         WebhookFilter         `json:"filter"`
+	Active         bool                  `json:"active"`
+	Description    string                `json:"description"`
 }

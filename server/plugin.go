@@ -43,6 +43,12 @@ type Plugin struct {
 	// createPagerDutyClient is a function to create PagerDuty clients.
 	// This can be overridden in tests to inject mock clients.
 	createPagerDutyClient func(accessToken, baseURL string) *pagerduty.Client
+
+	// botID is the Mattermost user ID for the PagerDuty bot.
+	botID string
+
+	// onCallMonitor runs background on-call change detection.
+	onCallMonitor *OnCallMonitor
 }
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
@@ -71,12 +77,32 @@ func (p *Plugin) OnActivate() error {
 		p.client.Log.Info("Plugin configuration is valid", "base_url", pluginConfig.APIBaseURL)
 	}
 
+	// Ensure bot account exists
+	if err := p.ensureBot(); err != nil {
+		p.client.Log.Error("Failed to ensure bot", "error", err)
+		return errors.Wrap(err, "failed to ensure PagerDuty bot")
+	}
+
+	// Register slash command
+	if err := p.registerCommand(); err != nil {
+		p.client.Log.Error("Failed to register slash command", "error", err)
+		return errors.Wrap(err, "failed to register slash command")
+	}
+
+	// Start the on-call monitor background job
+	p.onCallMonitor = NewOnCallMonitor(p)
+	p.onCallMonitor.Start()
+
 	p.client.Log.Info("PagerDuty plugin activated successfully")
 	return nil
 }
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
+	if p.onCallMonitor != nil {
+		p.onCallMonitor.Stop()
+	}
+
 	if p.client != nil {
 		p.client.Log.Info("PagerDuty plugin deactivating")
 	}

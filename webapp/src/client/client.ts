@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
-import type {ConnectionStatus, IncidentFilters} from '@/types/pagerduty';
+import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus} from '@/types/pagerduty';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -161,6 +161,53 @@ export class Client {
             body: JSON.stringify({start, end, user_id: userId}),
         });
 
+        return response.json();
+    }
+
+    // --- Channel Subscription Methods ---
+
+    async getChannelSubscription(channelId: string): Promise<{subscription: ChannelSubscription | null}> {
+        const response = await this.doFetch(`${this.baseUrl}/subscriptions?channel_id=${channelId}`);
+        return response.json();
+    }
+
+    async createChannelSubscription(channelId: string, eventTypes: string[], serviceIds?: string[]): Promise<{subscription: ChannelSubscription}> {
+        const response = await this.doFetch(`${this.baseUrl}/subscriptions`, {
+            method: 'POST',
+            body: JSON.stringify({
+                channel_id: channelId,
+                event_types: eventTypes,
+                service_ids: serviceIds || [],
+            }),
+        });
+        return response.json();
+    }
+
+    async deleteChannelSubscription(channelId: string): Promise<void> {
+        await this.doFetch(`${this.baseUrl}/subscriptions/${channelId}`, {
+            method: 'DELETE',
+        });
+    }
+
+    // --- Notification Preferences Methods ---
+
+    async getNotificationPrefs(): Promise<UserNotificationPrefs> {
+        const response = await this.doFetch(`${this.baseUrl}/notification-prefs`);
+        return response.json();
+    }
+
+    async setNotificationPrefs(prefs: UserNotificationPrefs): Promise<UserNotificationPrefs> {
+        const response = await this.doFetch(`${this.baseUrl}/notification-prefs`, {
+            method: 'PUT',
+            body: JSON.stringify(prefs),
+        });
+        return response.json();
+    }
+
+    // --- Webhook Status ---
+
+    async getWebhookStatus(): Promise<WebhookStatus> {
+        const response = await this.doFetch(`${this.baseUrl}/webhook/status`);
         return response.json();
     }
 }
