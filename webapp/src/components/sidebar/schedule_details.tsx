@@ -368,8 +368,8 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                                 onClick={handlePageSchedule}
                                                 aria-label={`Page ${entry.user.name || entry.user.summary}`}
                                                 style={{
-                                                    backgroundColor: theme.buttonBg,
-                                                    color: theme.buttonColor,
+                                                    backgroundColor: theme.dndIndicator || '#d32f2f',
+                                                    color: '#ffffff',
                                                     border: 'none',
                                                     borderRadius: '4px',
                                                     padding: '5px 10px',
