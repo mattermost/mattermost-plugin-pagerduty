@@ -264,6 +264,17 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         return incidentFilters;
     }, [filterMode, currentUser, incidentFilters]);
 
+    // Re-fetch incidents when filter mode changes while on the incidents tab
+    const prevFilterModeRef = useRef(filterMode);
+    useEffect(() => {
+        if (prevFilterModeRef.current !== filterMode) {
+            prevFilterModeRef.current = filterMode;
+            if (connected && activeTab === 'incidents' && !selectedIncident) {
+                fetchIncidents(false, effectiveIncidentFilters);
+            }
+        }
+    }, [filterMode, connected, activeTab, selectedIncident, effectiveIncidentFilters, fetchIncidents]);
+
     // Initial load for default tab (only when connected)
     useEffect(() => {
         if (connected) {
