@@ -323,6 +323,80 @@ func (c *Client) GetIncidentNotes(incidentID string) (*IncidentNotesResponse, er
 	return &response, nil
 }
 
+// GetCurrentUser retrieves the currently authenticated PagerDuty user
+func (c *Client) GetCurrentUser() (*UserResponse, error) {
+	body, err := c.doRequest("GET", "/users/me", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response UserResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal current user response")
+	}
+
+	return &response, nil
+}
+
+// GetOnCallsForUser retrieves on-call entries for a specific user
+func (c *Client) GetOnCallsForUser(userID string) (*OnCallsResponse, error) {
+	params := url.Values{}
+	params.Set("user_ids[]", userID)
+	params.Set("time_zone", "UTC")
+	params.Add("include[]", "users")
+	params.Add("include[]", "schedules")
+	params.Set("earliest", "true")
+
+	return c.GetOnCalls(params)
+}
+
+// GetUsers searches for PagerDuty users by query string
+func (c *Client) GetUsers(query string, limit int) (*UsersResponse, error) {
+	params := url.Values{}
+	if query != "" {
+		params.Set("query", query)
+	}
+	params.Set("limit", fmt.Sprintf("%d", limit))
+
+	body, err := c.doRequest("GET", "/users", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var response UsersResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal users response")
+	}
+
+	return &response, nil
+}
+
+// CreateOverride creates an override on a PagerDuty schedule
+func (c *Client) CreateOverride(scheduleID, start, end, userID string) (*OverrideResponse, error) {
+	request := CreateOverrideRequest{
+		Override: Override{
+			Start: start,
+			End:   end,
+			User: UserReference{
+				ID:   userID,
+				Type: "user_reference",
+			},
+		},
+	}
+
+	body, err := c.doRequestWithBody("POST", fmt.Sprintf("/schedules/%s/overrides", scheduleID), nil, request)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OverrideResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal create override response")
+	}
+
+	return &response, nil
+}
+
 // CreateIncidentNote creates a note on an incident
 func (c *Client) CreateIncidentNote(incidentID, content, fromEmail string) (*CreateIncidentNoteResponse, error) {
 	request := CreateIncidentNoteRequest{

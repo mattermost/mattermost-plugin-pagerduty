@@ -188,3 +188,22 @@ export interface IncidentFilters {
 export interface ConnectionStatus {
     connected: boolean;
 }
+
+export interface UserResponse {
+    user: User;
+}
+
+export interface UsersResponse extends ListResponse {
+    users: User[];
+}
+
+export interface Override {
+    id?: string;
+    start: string;
+    end: string;
+    user: UserReference;
+}
+
+export interface OverrideResponse {
+    override: Override;
+}

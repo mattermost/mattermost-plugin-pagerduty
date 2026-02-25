@@ -33,5 +33,19 @@
     "pagerduty.error.config.invalid": "PagerDuty plugin is not configured",
     "pagerduty.error.schedules.failed": "Failed to retrieve schedules",
     "pagerduty.error.oncalls.failed": "Failed to retrieve on-call users",
-    "pagerduty.error.incidents.failed": "Failed to retrieve incidents"
+    "pagerduty.error.incidents.failed": "Failed to retrieve incidents",
+    "pagerduty.sidebar.filter.mine": "Mine",
+    "pagerduty.sidebar.filter.all": "All",
+    "pagerduty.sidebar.schedule.takeShift": "Take",
+    "pagerduty.sidebar.schedule.override": "Override",
+    "pagerduty.sidebar.override.title": "Override Shift",
+    "pagerduty.sidebar.override.assignTo": "Assign to",
+    "pagerduty.sidebar.override.searchUsers": "Search users...",
+    "pagerduty.sidebar.override.start": "Start",
+    "pagerduty.sidebar.override.end": "End",
+    "pagerduty.sidebar.override.create": "Create Override",
+    "pagerduty.sidebar.override.creating": "Creating...",
+    "pagerduty.sidebar.override.cancel": "Cancel",
+    "pagerduty.sidebar.override.success": "Override created successfully",
+    "pagerduty.sidebar.override.shiftTaken": "Shift taken successfully"
 }

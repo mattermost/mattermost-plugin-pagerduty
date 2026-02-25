@@ -184,8 +184,8 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
                                     }}
                                 />
                             )}
-                            <div style={{flex: 1}}>
-                                <div style={{fontWeight: 500, color: theme.centerChannelColor}}>
+                            <div style={{flex: 1, minWidth: 0}}>
+                                <div style={{fontWeight: 500, color: theme.centerChannelColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const}}>
                                     {oncall.user.name}
                                 </div>
                                 <div style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7}}>

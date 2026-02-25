@@ -101,6 +101,7 @@ describe('PagerDutySidebar', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.useFakeTimers();
+        mockClient.getCurrentUser.mockResolvedValue({user: {id: 'U1', name: 'Test User', email: 'test@example.com'}});
     });
 
     afterEach(() => {
@@ -155,26 +156,28 @@ describe('PagerDutySidebar', () => {
     it('should show disconnect button when connected', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User'}});
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
         await waitFor(() => {
-            expect(screen.getByText('Disconnect')).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Disconnect PagerDuty account'})).toBeInTheDocument();
         });
     });
 
     it('should disconnect and show connect screen', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User'}});
         mockClient.disconnect.mockResolvedValueOnce(undefined);
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
         await waitFor(() => {
-            expect(screen.getByText('Disconnect')).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Disconnect PagerDuty account'})).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByText('Disconnect'));
+        fireEvent.click(screen.getByRole('button', {name: 'Disconnect PagerDuty account'}));
 
         await waitFor(() => {
             expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
@@ -212,7 +215,9 @@ describe('PagerDutySidebar', () => {
 
     it('should switch to schedules tab and load schedules', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
-        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: [
+            {user: {id: 'U1', name: 'Test User'}, schedule: {id: 'SCHED1', name: 'Primary On-Call'}, escalation_level: 1},
+        ]});
 
         const mockSchedules = {
             schedules: [
@@ -272,7 +277,9 @@ describe('PagerDutySidebar', () => {
 
     it('should show schedule details when a schedule is clicked', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
-        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: [
+            {user: {id: 'U1', name: 'Test User'}, schedule: {id: 'SCHED1', name: 'Primary On-Call'}, escalation_level: 1},
+        ]});
 
         const mockSchedules = {
             schedules: [{id: 'SCHED1', name: 'Primary On-Call'}],
@@ -322,7 +329,9 @@ describe('PagerDutySidebar', () => {
 
     it('should show back button when in detail view and hide tabs', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
-        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: [
+            {user: {id: 'U1', name: 'Test User'}, schedule: {id: 'SCHED1', name: 'Primary'}, escalation_level: 1},
+        ]});
         mockClient.getSchedules.mockResolvedValueOnce({
             schedules: [{id: 'SCHED1', name: 'Primary'}],
         });

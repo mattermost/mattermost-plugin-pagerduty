@@ -143,6 +143,26 @@ export class Client {
 
         return response.json();
     }
+
+    async getCurrentUser() {
+        const response = await this.doFetch(`${this.baseUrl}/users/me`);
+        return response.json();
+    }
+
+    async getUsers(query?: string) {
+        const params = query ? `?query=${encodeURIComponent(query)}` : '';
+        const response = await this.doFetch(`${this.baseUrl}/users${params}`);
+        return response.json();
+    }
+
+    async createOverride(scheduleId: string, start: string, end: string, userId: string) {
+        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/overrides`, {
+            method: 'POST',
+            body: JSON.stringify({start, end, user_id: userId}),
+        });
+
+        return response.json();
+    }
 }
 
 const client = new Client();
