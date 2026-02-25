@@ -6,7 +6,7 @@ import React from 'react';
 import PagerDutySidebar from './sidebar';
 
 import client from '@/client/client';
-import {render, screen, waitFor, fireEvent, mockTheme} from '@/test-utils';
+import {act, render, screen, waitFor, fireEvent, mockTheme} from '@/test-utils';
 
 // Mock the client module
 jest.mock('@/client/client');
@@ -107,6 +107,82 @@ describe('PagerDutySidebar', () => {
         jest.useRealTimers();
     });
 
+    it('should show loading state while checking connection', async () => {
+        // Never resolve the connection status
+        mockClient.getConnectionStatus.mockReturnValue(new Promise(() => {}));
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+
+    it('should show connect screen when not connected', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: false});
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        // Should show the connect button
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
+        });
+
+        // Should NOT show tabs
+        expect(screen.queryByTestId('tab-oncall')).not.toBeInTheDocument();
+    });
+
+    it('should open popup when connect button is clicked', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: false});
+        mockClient.getConnectUrl.mockReturnValue('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect');
+
+        const mockPopup = {closed: true};
+        window.open = jest.fn().mockReturnValue(mockPopup);
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: 'Connect to PagerDuty'}));
+
+        expect(window.open).toHaveBeenCalledWith(
+            'http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect',
+            'pagerduty-oauth',
+            'width=600,height=700',
+        );
+    });
+
+    it('should show disconnect button when connected', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('Disconnect')).toBeInTheDocument();
+        });
+    });
+
+    it('should disconnect and show connect screen', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.disconnect.mockResolvedValueOnce(undefined);
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('Disconnect')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Disconnect'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
+        });
+
+        expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+    });
+
     it('should render tabs and load on-calls by default', async () => {
         const mockOnCalls = {
             oncalls: [
@@ -114,17 +190,17 @@ describe('PagerDutySidebar', () => {
             ],
         };
 
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCalls);
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
         // Should show all three tabs
-        expect(screen.getByTestId('tab-oncall')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByTestId('tab-oncall')).toBeInTheDocument();
+        });
         expect(screen.getByTestId('tab-schedules')).toBeInTheDocument();
         expect(screen.getByTestId('tab-incidents')).toBeInTheDocument();
-
-        // Should show loading state initially
-        expect(screen.getByText('Loading on-call users...')).toBeInTheDocument();
 
         // Wait for on-calls to load
         await waitFor(() => {
@@ -135,6 +211,7 @@ describe('PagerDutySidebar', () => {
     });
 
     it('should switch to schedules tab and load schedules', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
 
         const mockSchedules = {
@@ -164,6 +241,7 @@ describe('PagerDutySidebar', () => {
     });
 
     it('should switch to incidents tab and load incidents', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
 
         const mockIncidents = {
@@ -193,6 +271,7 @@ describe('PagerDutySidebar', () => {
     });
 
     it('should show schedule details when a schedule is clicked', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
 
         const mockSchedules = {
@@ -225,16 +304,24 @@ describe('PagerDutySidebar', () => {
     });
 
     it('should handle error when loading on-calls fails', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockRejectedValueOnce(new Error('API Error'));
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
-        await waitFor(() => {
-            expect(screen.getByText('Error: API Error')).toBeInTheDocument();
+        // Flush all microtask chains (connection check → fetchOnCalls → rejection)
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
         });
+
+        expect(screen.getByText('Error: API Error')).toBeInTheDocument();
     });
 
     it('should show back button when in detail view and hide tabs', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
         mockClient.getSchedules.mockResolvedValueOnce({
             schedules: [{id: 'SCHED1', name: 'Primary'}],

@@ -306,4 +306,81 @@ describe('Client', () => {
             await expect(client.createIncidentNote('INC1', 'note')).rejects.toThrow('Failed to create incident note');
         });
     });
+
+    describe('getConnectionStatus', () => {
+        it('should fetch connection status successfully', async () => {
+            const mockStatus = {connected: true};
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockStatus,
+            });
+
+            const result = await client.getConnectionStatus();
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/status', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            expect(result).toEqual(mockStatus);
+        });
+
+        it('should return not connected status', async () => {
+            const mockStatus = {connected: false};
+
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockStatus,
+            });
+
+            const result = await client.getConnectionStatus();
+            expect(result).toEqual({connected: false});
+        });
+
+        it('should throw error on failed response', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                json: async () => ({message: 'Failed to check connection status'}),
+            });
+
+            await expect(client.getConnectionStatus()).rejects.toThrow('Failed to check connection status');
+        });
+    });
+
+    describe('getConnectUrl', () => {
+        it('should return the correct OAuth connect URL', () => {
+            const url = client.getConnectUrl();
+            expect(url).toBe('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect');
+        });
+    });
+
+    describe('disconnect', () => {
+        it('should disconnect successfully', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+            });
+
+            await client.disconnect();
+
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/disconnect', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+        });
+
+        it('should throw error on failed response', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                json: async () => ({message: 'Failed to disconnect'}),
+            });
+
+            await expect(client.disconnect()).rejects.toThrow('Failed to disconnect');
+        });
+    });
 });

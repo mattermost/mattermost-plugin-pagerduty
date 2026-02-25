@@ -17,6 +17,12 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 
+	// OAuth endpoints
+	apiRouter.HandleFunc("/oauth/connect", p.handleOAuthConnect).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/oauth/callback", p.handleOAuthCallback).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/oauth/disconnect", p.handleOAuthDisconnect).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/oauth/status", p.handleOAuthConnectionStatus).Methods(http.MethodGet)
+
 	// PagerDuty endpoints
 	apiRouter.HandleFunc("/schedules", p.handleGetSchedules).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/oncalls", p.handleGetOnCalls).Methods(http.MethodGet)

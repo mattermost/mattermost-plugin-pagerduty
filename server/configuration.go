@@ -18,8 +18,9 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	APIToken   string `json:"APIToken"`
-	APIBaseURL string `json:"APIBaseURL"`
+	OAuthClientID     string `json:"OAuthClientID"`
+	OAuthClientSecret string `json:"OAuthClientSecret"`
+	APIBaseURL        string `json:"APIBaseURL"`
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -85,8 +86,12 @@ func (p *Plugin) OnConfigurationChange() error {
 }
 
 func (c *configuration) IsValid() error {
-	if c.APIToken == "" {
-		return errors.New("PagerDuty API Token is required")
+	if c.OAuthClientID == "" {
+		return errors.New("PagerDuty OAuth Client ID is required")
+	}
+
+	if c.OAuthClientSecret == "" {
+		return errors.New("PagerDuty OAuth Client Secret is required")
 	}
 
 	return nil

@@ -12,24 +12,44 @@ import (
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
 )
 
+// handleGetPagerDutyClient is a helper that retrieves the per-user PagerDuty client.
+// It returns nil and writes an error response if the user is not connected.
+func (p *Plugin) handleGetPagerDutyClient(w http.ResponseWriter, r *http.Request) *pagerduty.Client {
+	userID := r.Header.Get("Mattermost-User-ID")
+	pdClient, err := p.getPagerDutyClientForUser(userID)
+	if err != nil {
+		errMsg := err.Error()
+		statusCode := http.StatusInternalServerError
+		errID := "api.pagerduty.auth.error"
+
+		if strings.Contains(errMsg, "not connected") {
+			statusCode = http.StatusUnauthorized
+			errID = "api.pagerduty.not_connected"
+		} else if strings.Contains(errMsg, "reconnect") {
+			statusCode = http.StatusUnauthorized
+			errID = "api.pagerduty.token_expired"
+		}
+
+		p.client.Log.Warn("Failed to get PagerDuty client for user", "user_id", userID, "error", errMsg)
+		p.handleError(w, r, &APIError{
+			ID:         errID,
+			Message:    errMsg,
+			StatusCode: statusCode,
+		})
+		return nil
+	}
+	return pdClient
+}
+
 func (p *Plugin) handleGetSchedules(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetSchedules called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
 		return
 	}
 
-	client := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
-	p.client.Log.Debug("Fetching schedules from PagerDuty API", "base_url", config.APIBaseURL)
-
-	schedules, err := client.GetSchedules(100, 0)
+	schedules, err := pdClient.GetSchedules(100, 0)
 	if err != nil {
 		p.client.Log.Error("Failed to get schedules from PagerDuty", "error", err.Error())
 		p.handleError(w, r, &APIError{
@@ -50,18 +70,10 @@ func (p *Plugin) handleGetSchedules(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleGetOnCalls(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetOnCalls called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
 		return
 	}
-
-	client := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
 
 	scheduleID := r.URL.Query().Get("schedule_id")
 	var oncalls *pagerduty.OnCallsResponse
@@ -69,10 +81,10 @@ func (p *Plugin) handleGetOnCalls(w http.ResponseWriter, r *http.Request) {
 
 	if scheduleID != "" {
 		p.client.Log.Debug("Fetching on-calls for specific schedule", "schedule_id", scheduleID)
-		oncalls, err = client.GetOnCallsForSchedule(scheduleID)
+		oncalls, err = pdClient.GetOnCallsForSchedule(scheduleID)
 	} else {
 		p.client.Log.Debug("Fetching current on-calls for all schedules")
-		oncalls, err = client.GetCurrentOnCalls()
+		oncalls, err = pdClient.GetCurrentOnCalls()
 	}
 
 	if err != nil {
@@ -95,17 +107,6 @@ func (p *Plugin) handleGetOnCalls(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleGetScheduleDetails(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetScheduleDetails called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
-		return
-	}
-
 	scheduleID := r.URL.Query().Get("id")
 	if scheduleID == "" {
 		p.client.Log.Warn("Schedule ID missing in request")
@@ -117,14 +118,17 @@ func (p *Plugin) handleGetScheduleDetails(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	client := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
 
 	// Get schedule with the next 48 hours of coverage
 	now := time.Now()
 	until := now.Add(48 * time.Hour)
 
 	p.client.Log.Debug("Fetching schedule details", "schedule_id", scheduleID, "from", now.Format(time.RFC3339), "until", until.Format(time.RFC3339))
-	schedule, err := client.GetSchedule(scheduleID, now, until)
+	schedule, err := pdClient.GetSchedule(scheduleID, now, until)
 	if err != nil {
 		p.client.Log.Error("Failed to get schedule details from PagerDuty", "error", err.Error(), "schedule_id", scheduleID)
 		p.handleError(w, r, &APIError{
@@ -145,21 +149,12 @@ func (p *Plugin) handleGetScheduleDetails(w http.ResponseWriter, r *http.Request
 func (p *Plugin) handleGetServices(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetServices called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
 		return
 	}
 
-	client := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
-	p.client.Log.Debug("Fetching services from PagerDuty API", "base_url", config.APIBaseURL)
-
-	services, err := client.GetServices(100, 0)
+	services, err := pdClient.GetServices(100, 0)
 	if err != nil {
 		p.client.Log.Error("Failed to get services from PagerDuty", "error", err.Error())
 		p.handleError(w, r, &APIError{
@@ -197,17 +192,6 @@ func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
-		return
-	}
-
 	var req CreateIncidentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		p.client.Log.Warn("Failed to decode create incident request", "error", err)
@@ -229,10 +213,14 @@ func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
 	p.client.Log.Debug("Creating incident in PagerDuty", "title", req.Title, "service_id", req.ServiceID, "assignees", len(req.AssigneeIDs))
 
-	incident, err := client.CreateIncident(req.Title, req.Description, req.ServiceID, req.AssigneeIDs)
+	incident, err := pdClient.CreateIncident(req.Title, req.Description, req.ServiceID, req.AssigneeIDs)
 	if err != nil {
 		p.client.Log.Error("Failed to create incident in PagerDuty", "error", err.Error())
 		p.handleError(w, r, &APIError{
@@ -263,18 +251,10 @@ func (p *Plugin) getUserEmail(userID string) (string, error) {
 func (p *Plugin) handleGetIncidents(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetIncidents called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
 		return
 	}
-
-	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
 
 	statuses := []string{"triggered", "acknowledged"}
 
@@ -369,17 +349,6 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	p.client.Log.Debug("handleUpdateIncident called", "user_id", userID)
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
-		return
-	}
-
 	vars := mux.Vars(r)
 	incidentID := vars["id"]
 	if incidentID == "" {
@@ -421,7 +390,11 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
 	incident, err := pdClient.UpdateIncident(incidentID, req.Status, email)
 	if err != nil {
 		p.client.Log.Error("Failed to update incident", "error", err.Error(), "incident_id", incidentID)
@@ -443,17 +416,6 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleGetIncidentNotes(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleGetIncidentNotes called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
-		return
-	}
-
 	vars := mux.Vars(r)
 	incidentID := vars["id"]
 	if incidentID == "" {
@@ -465,7 +427,11 @@ func (p *Plugin) handleGetIncidentNotes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
 	notes, err := pdClient.GetIncidentNotes(incidentID)
 	if err != nil {
 		p.client.Log.Error("Failed to get incident notes", "error", err.Error(), "incident_id", incidentID)
@@ -492,17 +458,6 @@ type CreateIncidentNoteAPIRequest struct {
 func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	p.client.Log.Debug("handleCreateIncidentNote called", "user_id", userID)
-
-	config := p.getConfiguration()
-	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid", "error", err)
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.config.invalid",
-			Message:    "Plugin not configured",
-			StatusCode: http.StatusNotImplemented,
-		})
-		return
-	}
 
 	vars := mux.Vars(r)
 	incidentID := vars["id"]
@@ -545,7 +500,11 @@ func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	pdClient := p.createPagerDutyClient(config.APIToken, config.APIBaseURL)
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
 	note, err := pdClient.CreateIncidentNote(incidentID, req.Content, email)
 	if err != nil {
 		p.client.Log.Error("Failed to create incident note", "error", err.Error(), "incident_id", incidentID)

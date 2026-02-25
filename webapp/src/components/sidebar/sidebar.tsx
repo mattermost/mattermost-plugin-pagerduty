@@ -17,6 +17,7 @@ import type {Theme} from '@/types/theme';
 type TabName = 'oncall' | 'schedules' | 'incidents';
 
 const REFRESH_INTERVAL_MS = 30000;
+const CONNECTION_POLL_INTERVAL_MS = 1000;
 
 interface Props {
     theme: Theme;
@@ -34,6 +35,9 @@ const formatTimeAgo = (date: Date): string => {
 };
 
 const PagerDutySidebar: React.FC<Props> = ({theme}) => {
+    // Connection state: null = checking, true = connected, false = not connected
+    const [connected, setConnected] = useState<boolean | null>(null);
+
     // Tab state
     const [activeTab, setActiveTab] = useState<TabName>('oncall');
 
@@ -65,6 +69,57 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     // Track if user is interacting with a form (to skip auto-refresh)
     const isInteractingRef = useRef(false);
+
+    // Check connection status
+    const checkConnection = useCallback(async () => {
+        try {
+            const status = await client.getConnectionStatus();
+            setConnected(status.connected);
+            return status.connected;
+        } catch {
+            setConnected(false);
+            return false;
+        }
+    }, []);
+
+    // Initial connection check
+    useEffect(() => {
+        checkConnection();
+    }, [checkConnection]);
+
+    // Handle connect button — open popup and poll for connection
+    const handleConnect = useCallback(() => {
+        const connectUrl = client.getConnectUrl();
+        const popup = window.open(connectUrl, 'pagerduty-oauth', 'width=600,height=700');
+
+        const pollInterval = setInterval(async () => {
+            // Check if popup was closed
+            if (popup && popup.closed) {
+                clearInterval(pollInterval);
+                const isConnected = await checkConnection();
+                if (isConnected) {
+                    setLoading(true);
+                }
+            }
+        }, CONNECTION_POLL_INTERVAL_MS);
+
+        // Safety cleanup after 5 minutes
+        setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+    }, [checkConnection]);
+
+    // Handle disconnect
+    const handleDisconnect = useCallback(async () => {
+        try {
+            await client.disconnect();
+            setConnected(false);
+            setOnCalls([]);
+            setSchedules([]);
+            setIncidents([]);
+            setLastRefreshed(null);
+        } catch {
+            // Disconnect failed silently
+        }
+    }, []);
 
     // Data fetching functions
     const fetchOnCalls = useCallback(async (silent = false) => {
@@ -151,13 +206,18 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         }
     }, []);
 
-    // Initial load for default tab
+    // Initial load for default tab (only when connected)
     useEffect(() => {
-        fetchOnCalls();
-    }, [fetchOnCalls]);
+        if (connected) {
+            fetchOnCalls();
+        }
+    }, [connected, fetchOnCalls]);
 
-    // Auto-refresh
+    // Auto-refresh (only when connected)
     useEffect(() => {
+        if (!connected) {
+            return undefined;
+        }
         const interval = setInterval(() => {
             if (isInteractingRef.current) {
                 return;
@@ -180,7 +240,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         }, REFRESH_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [activeTab, selectedSchedule, selectedIncident, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
+    }, [connected, activeTab, selectedSchedule, selectedIncident, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
 
     // Tab change handler
     const handleTabChange = (tab: TabName) => {
@@ -309,16 +369,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         if (selectedIncident) {
             return 'Incident Details';
         }
-        switch (activeTab) {
-        case 'oncall':
-            return 'PagerDuty';
-        case 'schedules':
-            return 'PagerDuty';
-        case 'incidents':
-            return 'PagerDuty';
-        default:
-            return 'PagerDuty';
-        }
+        return 'PagerDuty';
     };
 
     const showBackButton = selectedSchedule !== null || selectedIncident !== null;
@@ -329,6 +380,93 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         {key: 'incidents', label: 'Incidents'},
     ];
 
+    // Connection check loading state
+    if (connected === null) {
+        return (
+            <div
+                className='pagerduty-sidebar'
+                style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}
+            >
+                <p style={{color: theme.centerChannelColor, opacity: 0.6}}>{'Loading...'}</p>
+            </div>
+        );
+    }
+
+    // Not connected — show connect screen
+    if (!connected) {
+        return (
+            <div
+                className='pagerduty-sidebar'
+                style={{height: '100%', display: 'flex', flexDirection: 'column'}}
+            >
+                <div
+                    style={{
+                        padding: '12px 16px',
+                        borderBottom: `1px solid ${theme.centerChannelColor}20`,
+                    }}
+                >
+                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
+                        {'PagerDuty'}
+                    </h3>
+                </div>
+                <div
+                    className='pagerduty-connect-screen'
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '32px 24px',
+                        textAlign: 'center',
+                    }}
+                >
+                    <svg
+                        width='48'
+                        height='48'
+                        viewBox='0 0 64 64'
+                        xmlns='http://www.w3.org/2000/svg'
+                        style={{marginBottom: '16px'}}
+                    >
+                        <rect
+                            width='64'
+                            height='64'
+                            rx='8'
+                            fill='#06AC38'
+                        />
+                        <path
+                            d='M 16 16 L 32 16 Q 40 16 44 20 Q 48 24 48 32 Q 48 40 44 44 Q 40 48 32 48 L 24 48 L 24 56 L 16 56 Z M 24 24 L 24 40 L 32 40 Q 36 40 38 38 Q 40 36 40 32 Q 40 28 38 26 Q 36 24 32 24 Z'
+                            fill='white'
+                        />
+                    </svg>
+                    <h4 style={{color: theme.centerChannelColor, margin: '0 0 8px 0', fontSize: '16px'}}>
+                        {'Connect to PagerDuty'}
+                    </h4>
+                    <p style={{color: theme.centerChannelColor, opacity: 0.6, fontSize: '13px', margin: '0 0 24px 0', lineHeight: 1.5}}>
+                        {'Connect your PagerDuty account to view on-call schedules, manage incidents, and page team members.'}
+                    </p>
+                    <button
+                        className='pagerduty-connect-button'
+                        onClick={handleConnect}
+                        style={{
+                            backgroundColor: theme.buttonBg,
+                            color: theme.buttonColor,
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '10px 24px',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {'Connect to PagerDuty'}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Connected — show normal sidebar
     return (
         <div
             className='pagerduty-sidebar'
@@ -384,6 +522,22 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         }}
                     >
                         {'Refresh'}
+                    </button>
+                    <button
+                        className='pagerduty-disconnect-button'
+                        onClick={handleDisconnect}
+                        title='Disconnect PagerDuty'
+                        style={{
+                            backgroundColor: 'transparent',
+                            color: theme.centerChannelColor,
+                            opacity: 0.4,
+                            border: 'none',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                        }}
+                    >
+                        {'Disconnect'}
                     </button>
                 </div>
             </div>

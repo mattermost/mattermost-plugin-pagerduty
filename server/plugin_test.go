@@ -13,10 +13,65 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
+	"github.com/svelle/mattermost-pagerduty-plugin/server/store/kvstore"
 )
 
+// mockKVStore implements kvstore.KVStore for testing
+type mockKVStore struct {
+	getUserTokenFunc    func(userID string) (*kvstore.OAuthToken, error)
+	setUserTokenFunc    func(userID string, token *kvstore.OAuthToken) error
+	deleteUserTokenFunc func(userID string) error
+	getOAuthStateFunc   func(state string) (*kvstore.OAuthState, error)
+	setOAuthStateFunc   func(state string, oauthState *kvstore.OAuthState) error
+	deleteOAuthStateFunc func(state string) error
+}
+
+func (m *mockKVStore) GetCachedSchedules() ([]byte, error) { return nil, nil }
+func (m *mockKVStore) SetCachedSchedules(_ []byte) error    { return nil }
+
+func (m *mockKVStore) GetUserToken(userID string) (*kvstore.OAuthToken, error) {
+	if m.getUserTokenFunc != nil {
+		return m.getUserTokenFunc(userID)
+	}
+	return nil, nil
+}
+
+func (m *mockKVStore) SetUserToken(userID string, token *kvstore.OAuthToken) error {
+	if m.setUserTokenFunc != nil {
+		return m.setUserTokenFunc(userID, token)
+	}
+	return nil
+}
+
+func (m *mockKVStore) DeleteUserToken(userID string) error {
+	if m.deleteUserTokenFunc != nil {
+		return m.deleteUserTokenFunc(userID)
+	}
+	return nil
+}
+
+func (m *mockKVStore) GetOAuthState(state string) (*kvstore.OAuthState, error) {
+	if m.getOAuthStateFunc != nil {
+		return m.getOAuthStateFunc(state)
+	}
+	return nil, nil
+}
+
+func (m *mockKVStore) SetOAuthState(state string, oauthState *kvstore.OAuthState) error {
+	if m.setOAuthStateFunc != nil {
+		return m.setOAuthStateFunc(state, oauthState)
+	}
+	return nil
+}
+
+func (m *mockKVStore) DeleteOAuthState(state string) error {
+	if m.deleteOAuthStateFunc != nil {
+		return m.deleteOAuthStateFunc(state)
+	}
+	return nil
+}
+
 func TestPlugin_OnActivate(t *testing.T) {
-	// Test successful activation
 	t.Run("successful activation", func(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
@@ -27,7 +82,6 @@ func TestPlugin_OnActivate(t *testing.T) {
 				SiteURL: &siteURL,
 			},
 		})
-		// Capture all log calls
 		api.On("LogInfo", mock.Anything).Return().Maybe()
 		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
@@ -42,9 +96,9 @@ func TestPlugin_OnActivate(t *testing.T) {
 		assert.NotNil(t, plugin.client)
 		assert.NotNil(t, plugin.kvstore)
 		assert.NotNil(t, plugin.createPagerDutyClient)
+		assert.Equal(t, "http://localhost:8065", plugin.siteURL)
 	})
 
-	// Test missing site URL
 	t.Run("missing site URL", func(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
@@ -70,7 +124,6 @@ func TestPlugin_OnDeactivate(t *testing.T) {
 	api := &plugintest.API{}
 	defer api.AssertExpectations(t)
 
-	// Mock the log call
 	api.On("LogInfo", mock.Anything).Return()
 
 	plugin := &Plugin{}
@@ -105,14 +158,18 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:           "schedules endpoint",
-			method:         http.MethodGet,
-			path:           "/api/v1/schedules",
-			userID:         "test-user-id",
-			expectedStatus: http.StatusNotImplemented, // Will fail due to missing config
+			name:   "schedules endpoint - not connected",
+			method: http.MethodGet,
+			path:   "/api/v1/schedules",
+			userID: "test-user-id",
 			setupPlugin: func(p *Plugin) {
-				p.configuration = &configuration{}
+				p.configuration = &configuration{
+					OAuthClientID:     "client-id",
+					OAuthClientSecret: "client-secret",
+				}
+				p.kvstore = &mockKVStore{}
 			},
+			expectedStatus: http.StatusUnauthorized,
 		},
 	}
 
@@ -121,16 +178,15 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			api := &plugintest.API{}
 			defer api.AssertExpectations(t)
 
-			// Setup common mocks
-			api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Maybe()
-			api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Maybe()
-			api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Maybe()
-			api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+			api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+			api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+			api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+			api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 			plugin := &Plugin{}
 			plugin.SetAPI(api)
 			plugin.client = pluginapi.NewClient(api, nil)
-			plugin.createPagerDutyClient = pagerduty.NewClient
+			plugin.createPagerDutyClient = pagerduty.NewOAuthClient
 
 			if tt.setupPlugin != nil {
 				tt.setupPlugin(plugin)
@@ -161,24 +217,36 @@ func TestPlugin_Configuration(t *testing.T) {
 			{
 				name: "valid configuration",
 				config: configuration{
-					APIToken:   "test-token",
-					APIBaseURL: "https://api.pagerduty.com",
+					OAuthClientID:     "client-id",
+					OAuthClientSecret: "client-secret",
+					APIBaseURL:        "https://api.pagerduty.com",
 				},
 				wantErr: false,
 			},
 			{
-				name: "missing API token",
+				name: "missing client ID",
 				config: configuration{
-					APIToken:   "",
-					APIBaseURL: "https://api.pagerduty.com",
+					OAuthClientID:     "",
+					OAuthClientSecret: "client-secret",
+					APIBaseURL:        "https://api.pagerduty.com",
 				},
 				wantErr: true,
 			},
 			{
-				name: "empty base URL uses default",
+				name: "missing client secret",
 				config: configuration{
-					APIToken:   "test-token",
-					APIBaseURL: "",
+					OAuthClientID:     "client-id",
+					OAuthClientSecret: "",
+					APIBaseURL:        "https://api.pagerduty.com",
+				},
+				wantErr: true,
+			},
+			{
+				name: "empty base URL is ok",
+				config: configuration{
+					OAuthClientID:     "client-id",
+					OAuthClientSecret: "client-secret",
+					APIBaseURL:        "",
 				},
 				wantErr: false,
 			},
@@ -204,15 +272,14 @@ func TestPlugin_Configuration(t *testing.T) {
 		plugin.SetAPI(api)
 		plugin.client = pluginapi.NewClient(api, nil)
 
-		// Test setting configuration
 		config := &configuration{
-			APIToken:   "new-token",
-			APIBaseURL: "https://new.pagerduty.com",
+			OAuthClientID:     "new-client-id",
+			OAuthClientSecret: "new-client-secret",
+			APIBaseURL:        "https://new.pagerduty.com",
 		}
 
 		plugin.setConfiguration(config)
 
-		// Verify configuration was set
 		got := plugin.getConfiguration()
 		assert.Equal(t, config, got)
 	})
@@ -221,10 +288,10 @@ func TestPlugin_Configuration(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		// Mock LoadPluginConfiguration
 		api.On("LoadPluginConfiguration", mock.Anything).Run(func(args mock.Arguments) {
 			config := args.Get(0).(*configuration)
-			config.APIToken = "test-token"
+			config.OAuthClientID = "loaded-client-id"
+			config.OAuthClientSecret = "loaded-client-secret"
 			config.APIBaseURL = "https://api.pagerduty.com"
 		}).Return(nil)
 
@@ -232,13 +299,12 @@ func TestPlugin_Configuration(t *testing.T) {
 		plugin.SetAPI(api)
 		plugin.client = pluginapi.NewClient(api, nil)
 
-		// Test configuration change
 		err := plugin.OnConfigurationChange()
 		assert.NoError(t, err)
 
-		// Verify configuration was loaded
 		config := plugin.getConfiguration()
-		assert.Equal(t, "test-token", config.APIToken)
+		assert.Equal(t, "loaded-client-id", config.OAuthClientID)
+		assert.Equal(t, "loaded-client-secret", config.OAuthClientSecret)
 		assert.Equal(t, "https://api.pagerduty.com", config.APIBaseURL)
 	})
 }
@@ -248,7 +314,6 @@ func TestPlugin_Integration(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		// Setup mocks for activation
 		siteURL := "http://localhost:8065"
 		api.On("GetConfig").Return(&model.Config{
 			ServiceSettings: model.ServiceSettings{
@@ -263,23 +328,19 @@ func TestPlugin_Integration(t *testing.T) {
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
 
-		// Activate plugin
 		err := plugin.OnActivate()
 		require.NoError(t, err)
 
-		// Verify plugin is properly initialized
 		assert.NotNil(t, plugin.client)
 		assert.NotNil(t, plugin.kvstore)
-		assert.NotNil(t, plugin.kvstore)
 
-		// Test configuration
 		config := &configuration{
-			APIToken:   "test-token",
-			APIBaseURL: "https://api.pagerduty.com",
+			OAuthClientID:     "client-id",
+			OAuthClientSecret: "client-secret",
+			APIBaseURL:        "https://api.pagerduty.com",
 		}
 		plugin.setConfiguration(config)
 
-		// Deactivate plugin
 		err = plugin.OnDeactivate()
 		assert.NoError(t, err)
 	})
