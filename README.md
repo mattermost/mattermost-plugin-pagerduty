@@ -17,7 +17,7 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 - **Direct Paging**: Page the current on-call person directly from the schedule view
 - **Right-Hand Sidebar**: Dedicated sidebar accessible via channel header button
 - **Real-time Data**: Always shows current information - no background syncing needed
-- **Secure Configuration**: API tokens are stored securely and never exposed in the UI
+- **Secure Configuration**: Per-user OAuth tokens are stored securely and never exposed in the UI
 
 ### User Interface
 - **Intuitive Navigation**: Easy back button to switch between schedule list and details
@@ -29,14 +29,14 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 - **Enhanced Styling**: Comprehensive CSS classes for customization
 
 ### Configuration
-- **PagerDuty API Token**: Secure token storage for API authentication
+- **PagerDuty OAuth**: Per-user OAuth integration with PagerDuty
 - **Custom API URL**: Support for self-hosted or regional PagerDuty instances
 
 ## Requirements
 
 - Mattermost Server v6.2.1 or higher
 - PagerDuty account with API access
-- PagerDuty API token
+- PagerDuty OAuth application (Scoped OAuth)
 
 ## Installation
 
@@ -47,15 +47,38 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 
 ## Configuration
 
-After installing the plugin, configure it in **System Console > Plugins > PagerDuty**:
+### Step 1: Create a PagerDuty OAuth Application
 
-1. **PagerDuty API Token**: Enter your PagerDuty API token
-   - Generate a token in PagerDuty: **Configuration > API Access Keys**
-   - Ensure the token has read access to schedules and users
-   - For paging functionality, the token needs write access to create incidents
+1. Go to https://developer.pagerduty.com/apps and click **Create New App**
+2. Set the app name (e.g., "Mattermost PagerDuty Plugin")
+3. Under **OAuth 2.0** settings, configure:
+   - **Redirect URL**: `https://<YOUR_MATTERMOST_URL>/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/callback`
+   - **Grant Type**: Authorization Code
+   - **Scopes** (enable all of these):
+     - `incidents.read`
+     - `incidents.write`
+     - `oncalls.read`
+     - `schedules.read`
+     - `services.read`
+     - `users.read`
+4. Save the app and copy the **Client ID** and **Client Secret**
 
-2. **PagerDuty API Base URL**: (Optional) Customize if using a non-standard PagerDuty instance
-   - Default: `https://api.pagerduty.com`
+### Step 2: Configure the Mattermost Plugin
+
+1. In Mattermost, go to **System Console > Plugins > PagerDuty**
+2. Paste the **OAuth Client ID** from Step 1
+3. Paste the **OAuth Client Secret** from Step 1
+4. (Optional) Set a custom **API Base URL** if not using the default `https://api.pagerduty.com`
+5. Click **Save**
+
+### Step 3: User Connection
+
+Each Mattermost user connects their own PagerDuty account:
+
+1. Click the PagerDuty icon in the channel header to open the sidebar
+2. Click **Connect to PagerDuty** — a popup opens to the PagerDuty authorization page
+3. Authorize the application — the popup closes automatically and PagerDuty data loads
+4. To disconnect, click the **Disconnect** button in the sidebar header
 
 ## Usage
 
@@ -63,7 +86,8 @@ After installing the plugin, configure it in **System Console > Plugins > PagerD
 
 1. Look for the PagerDuty icon in the channel header (green icon with "P")
 2. Click it to open the right-hand sidebar
-3. The sidebar will load and display all your PagerDuty schedules
+3. First-time users will see a **Connect to PagerDuty** prompt — click it to authorize your account
+4. Once connected, the sidebar loads and displays your PagerDuty schedules
 
 ### Viewing Schedules
 
