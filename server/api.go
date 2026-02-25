@@ -33,6 +33,9 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	apiRouter.HandleFunc("/incidents/{id}", p.handleUpdateIncident).Methods(http.MethodPut)
 	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleGetIncidentNotes).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleCreateIncidentNote).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/users/me", p.handleGetCurrentUser).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/users", p.handleGetUsers).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/schedules/{id}/overrides", p.handleCreateOverride).Methods(http.MethodPost)
 
 	router.ServeHTTP(w, r)
 }

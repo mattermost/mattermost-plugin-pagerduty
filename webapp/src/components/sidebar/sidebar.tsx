@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import IncidentDetails from './incident_details';
 import IncidentList from './incident_list';
@@ -56,6 +56,13 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     const [filterSchedules, setFilterSchedules] = useState<Schedule[]>([]);
     const [filterUsers, setFilterUsers] = useState<User[]>([]);
     const [userScheduleMap, setUserScheduleMap] = useState<Record<string, string>>({});
+
+    // Current PagerDuty user identity
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    // Filter mode: 'mine' shows only user's schedules/on-calls, 'all' shows everything
+    const [filterMode, setFilterMode] = useState<'mine' | 'all'>('mine');
+    const [myScheduleIds, setMyScheduleIds] = useState<Set<string>>(new Set());
 
     // Shared state
     const [loading, setLoading] = useState(true);
@@ -124,6 +131,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         try {
             await client.disconnect();
             setConnected(false);
+            setCurrentUser(null);
             setOnCalls([]);
             setSchedules([]);
             setIncidents([]);
@@ -219,6 +227,54 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         }
     }, []);
 
+    // Fetch current PagerDuty user identity when connected
+    useEffect(() => {
+        if (!connected) {
+            return;
+        }
+        (async () => {
+            try {
+                const data = await client.getCurrentUser();
+                setCurrentUser(data.user || null);
+            } catch {
+                // Non-blocking: user identity is optional for core functionality
+            }
+        })();
+    }, [connected]);
+
+    // Derive myScheduleIds from onCalls whenever onCalls or currentUser changes
+    useEffect(() => {
+        if (!currentUser) {
+            return;
+        }
+        const ids = new Set<string>();
+        for (const oc of onCalls) {
+            if (oc.user?.id === currentUser.id && oc.schedule?.id) {
+                ids.add(oc.schedule.id);
+            }
+        }
+        setMyScheduleIds(ids);
+    }, [onCalls, currentUser]);
+
+    // Compute effective incident filters (merges "mine" filter with user-selected filters)
+    const effectiveIncidentFilters = useMemo((): IncidentFilters => {
+        if (filterMode === 'mine' && currentUser) {
+            return {...incidentFilters, userIds: [currentUser.id]};
+        }
+        return incidentFilters;
+    }, [filterMode, currentUser, incidentFilters]);
+
+    // Re-fetch incidents when filter mode changes while on the incidents tab
+    const prevFilterModeRef = useRef(filterMode);
+    useEffect(() => {
+        if (prevFilterModeRef.current !== filterMode) {
+            prevFilterModeRef.current = filterMode;
+            if (connected && activeTab === 'incidents' && !selectedIncident) {
+                fetchIncidents(false, effectiveIncidentFilters);
+            }
+        }
+    }, [filterMode, connected, activeTab, selectedIncident, effectiveIncidentFilters, fetchIncidents]);
+
     // Initial load for default tab (only when connected)
     useEffect(() => {
         if (connected) {
@@ -246,14 +302,14 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 break;
             case 'incidents':
                 if (!selectedIncident) {
-                    fetchIncidents(true, incidentFilters);
+                    fetchIncidents(true, effectiveIncidentFilters);
                 }
                 break;
             }
         }, REFRESH_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [connected, activeTab, selectedSchedule, selectedIncident, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
+    }, [connected, activeTab, selectedSchedule, selectedIncident, effectiveIncidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
 
     // Tab change handler — preserves incident filters across tab switches
     const handleTabChange = (tab: TabName) => {
@@ -272,7 +328,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             fetchSchedules();
             break;
         case 'incidents':
-            fetchIncidents(false, incidentFilters);
+            fetchIncidents(false, effectiveIncidentFilters);
             loadFilterOptions();
             break;
         }
@@ -302,18 +358,21 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     const handleAcknowledge = async (incidentId: string) => {
         await client.updateIncident(incidentId, 'acknowledged');
-        await fetchIncidents(true, incidentFilters);
+        await fetchIncidents(true, effectiveIncidentFilters);
     };
 
     const handleResolve = async (incidentId: string) => {
         await client.updateIncident(incidentId, 'resolved');
-        await fetchIncidents(true, incidentFilters);
+        await fetchIncidents(true, effectiveIncidentFilters);
     };
 
     const handleIncidentFiltersChange = useCallback((newFilters: IncidentFilters) => {
         setIncidentFilters(newFilters);
-        fetchIncidents(false, newFilters);
-    }, [fetchIncidents]);
+        const effective = filterMode === 'mine' && currentUser ?
+            {...newFilters, userIds: [currentUser.id]} :
+            newFilters;
+        fetchIncidents(false, effective);
+    }, [fetchIncidents, filterMode, currentUser]);
 
     const handleIncidentUpdated = (updatedIncident: Incident) => {
         setSelectedIncident(updatedIncident);
@@ -349,7 +408,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             setSelectedSchedule(null);
         } else if (selectedIncident) {
             setSelectedIncident(null);
-            fetchIncidents(true, incidentFilters);
+            fetchIncidents(true, effectiveIncidentFilters);
         }
     };
 
@@ -371,7 +430,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 // Refresh notes by re-selecting
                 setSelectedIncident({...selectedIncident});
             } else {
-                fetchIncidents(false, incidentFilters);
+                fetchIncidents(false, effectiveIncidentFilters);
             }
             break;
         }
@@ -387,10 +446,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             fetchSchedules();
             break;
         case 'incidents':
-            fetchIncidents(false, incidentFilters);
+            fetchIncidents(false, effectiveIncidentFilters);
             break;
         }
-    }, [activeTab, incidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
+    }, [activeTab, effectiveIncidentFilters, fetchOnCalls, fetchSchedules, fetchIncidents]);
 
     // Determine header title
     const getHeaderTitle = (): string => {
@@ -582,25 +641,31 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         {getHeaderTitle()}
                     </h3>
                 </div>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                    {lastRefreshed && (
-                        <span style={{fontSize: '11px', color: theme.centerChannelColor, opacity: 0.4}}>
-                            {formatTimeAgo(lastRefreshed)}
-                        </span>
-                    )}
+                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
                     <button
                         onClick={handleRefresh}
                         aria-label='Refresh data'
+                        title={lastRefreshed ? `Updated ${formatTimeAgo(lastRefreshed)}` : 'Refresh'}
                         style={{
                             backgroundColor: 'transparent',
                             color: theme.linkColor,
                             border: 'none',
-                            padding: '4px 8px',
+                            padding: '4px 6px',
                             cursor: 'pointer',
-                            fontSize: '14px',
+                            lineHeight: 1,
+                            display: 'flex',
+                            alignItems: 'center',
                         }}
                     >
-                        {'Refresh'}
+                        <svg
+                            width='14'
+                            height='14'
+                            viewBox='0 0 24 24'
+                            fill='currentColor'
+                            aria-hidden='true'
+                        >
+                            <path d='M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z'/>
+                        </svg>
                     </button>
                     <button
                         className='pagerduty-disconnect-button'
@@ -612,12 +677,22 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             color: theme.centerChannelColor,
                             opacity: 0.4,
                             border: 'none',
-                            padding: '4px',
+                            padding: '4px 6px',
                             cursor: 'pointer',
-                            fontSize: '12px',
+                            lineHeight: 1,
+                            display: 'flex',
+                            alignItems: 'center',
                         }}
                     >
-                        {'Disconnect'}
+                        <svg
+                            width='14'
+                            height='14'
+                            viewBox='0 0 24 24'
+                            fill='currentColor'
+                            aria-hidden='true'
+                        >
+                            <path d='M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z'/>
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -663,6 +738,39 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 </div>
             )}
 
+            {/* Mine / All Filter Toggle */}
+            {!showBackButton && currentUser && (
+                <div
+                    className='pagerduty-filter-toggle'
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        padding: '8px 16px',
+                        borderBottom: `1px solid ${theme.centerChannelColor}20`,
+                    }}
+                >
+                    {(['mine', 'all'] as const).map((mode) => (
+                        <button
+                            key={mode}
+                            className={`pagerduty-filter-${mode}`}
+                            onClick={() => setFilterMode(mode)}
+                            style={{
+                                backgroundColor: filterMode === mode ? theme.buttonBg : 'transparent',
+                                color: filterMode === mode ? theme.buttonColor : theme.centerChannelColor,
+                                border: filterMode === mode ? 'none' : `1px solid ${theme.centerChannelColor}30`,
+                                borderRadius: mode === 'mine' ? '4px 0 0 4px' : '0 4px 4px 0',
+                                padding: '4px 16px',
+                                fontSize: '12px',
+                                fontWeight: filterMode === mode ? 600 : 400,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {mode === 'mine' ? 'Mine' : 'All'}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {/* Paging success message */}
             {pagingSuccess && (
                 <div
@@ -689,7 +797,9 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 {/* On-Call Tab */}
                 {activeTab === 'oncall' && (
                     <OnCallList
-                        onCalls={onCalls}
+                        onCalls={filterMode === 'mine' && currentUser ?
+                            onCalls.filter((oc) => oc.user?.id === currentUser.id) :
+                            onCalls}
                         theme={theme}
                         loading={loading}
                         error={error}
@@ -706,10 +816,18 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             onBack={handleBack}
                             theme={theme}
                             loading={loadingDetails}
+                            currentUser={currentUser || undefined}
+                            onOverrideCreated={() => {
+                                if (selectedSchedule) {
+                                    handleScheduleClick(selectedSchedule.id);
+                                }
+                            }}
                         />
                     ) : (
                         <ScheduleList
-                            schedules={schedules}
+                            schedules={filterMode === 'mine' && currentUser ?
+                                schedules.filter((s) => myScheduleIds.has(s.id)) :
+                                schedules}
                             onScheduleClick={handleScheduleClick}
                             theme={theme}
                             loading={loading}

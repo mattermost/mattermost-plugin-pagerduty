@@ -248,3 +248,32 @@ type CreateIncidentNoteBody struct {
 type CreateIncidentNoteResponse struct {
 	Note IncidentNote `json:"note"`
 }
+
+// UserResponse wraps a single user response from PagerDuty
+type UserResponse struct {
+	User User `json:"user"`
+}
+
+// UsersResponse wraps the users list response from PagerDuty
+type UsersResponse struct {
+	ListResponse
+	Users []User `json:"users"`
+}
+
+// Override represents a PagerDuty schedule override
+type Override struct {
+	ID    string        `json:"id,omitempty"`
+	Start string        `json:"start"`
+	End   string        `json:"end"`
+	User  UserReference `json:"user"`
+}
+
+// CreateOverrideRequest represents the request to create a schedule override
+type CreateOverrideRequest struct {
+	Override Override `json:"override"`
+}
+
+// OverrideResponse wraps a single override response
+type OverrideResponse struct {
+	Override Override `json:"override"`
+}

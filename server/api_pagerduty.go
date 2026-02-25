@@ -446,6 +446,126 @@ func (p *Plugin) handleGetIncidentNotes(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func (p *Plugin) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleGetCurrentUser called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	user, err := pdClient.GetCurrentUser()
+	if err != nil {
+		p.client.Log.Error("Failed to get current user from PagerDuty", "error", err.Error())
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.users.me.error",
+			Message:    "Failed to retrieve current user",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully retrieved current user", "pd_user_id", user.User.ID, "name", user.User.Name)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		p.client.Log.Error("Failed to encode current user response", "error", err.Error())
+	}
+}
+
+func (p *Plugin) handleGetUsers(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleGetUsers called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	query := r.URL.Query().Get("query")
+
+	users, err := pdClient.GetUsers(query, 25)
+	if err != nil {
+		p.client.Log.Error("Failed to get users from PagerDuty", "error", err.Error())
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.users.error",
+			Message:    "Failed to retrieve users",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully retrieved users", "count", len(users.Users))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(users); err != nil {
+		p.client.Log.Error("Failed to encode users response", "error", err.Error())
+	}
+}
+
+// CreateOverrideAPIRequest represents the API request body for creating a schedule override
+type CreateOverrideAPIRequest struct {
+	Start  string `json:"start"`
+	End    string `json:"end"`
+	UserID string `json:"user_id"`
+}
+
+func (p *Plugin) handleCreateOverride(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleCreateOverride called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	vars := mux.Vars(r)
+	scheduleID := vars["id"]
+	if scheduleID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.override.schedule.missing",
+			Message:    "Schedule ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req CreateOverrideAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.override.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.Start == "" || req.End == "" || req.UserID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.override.fields.missing",
+			Message:    "Start, end, and user_id are required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	override, err := pdClient.CreateOverride(scheduleID, req.Start, req.End, req.UserID)
+	if err != nil {
+		p.client.Log.Error("Failed to create override", "error", err.Error(), "schedule_id", scheduleID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.override.create.error",
+			Message:    "Failed to create override",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	p.client.Log.Info("Successfully created override", "schedule_id", scheduleID, "override_id", override.Override.ID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(override); err != nil {
+		p.client.Log.Error("Failed to encode create override response", "error", err.Error())
+	}
+}
+
 // CreateIncidentNoteAPIRequest represents the API request for adding a note
 type CreateIncidentNoteAPIRequest struct {
 	Content string `json:"content"`

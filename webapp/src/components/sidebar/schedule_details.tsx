@@ -3,8 +3,10 @@
 
 import React, {useEffect, useRef, useState} from 'react';
 
+import {OverrideDialog} from './override_dialog';
 import {PagingDialog} from './paging_dialog';
 
+import client from '@/client/client';
 import type {Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
@@ -13,13 +15,20 @@ interface Props {
     onBack: () => void;
     theme: Theme;
     loading: boolean;
+    currentUser?: User;
+    onOverrideCreated?: () => void;
 }
 
-const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
+const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser, onOverrideCreated}) => {
     const [showPagingDialog, setShowPagingDialog] = useState(false);
     const [pagingTarget, setPagingTarget] = useState<{type: 'schedule' | 'user'; target: Schedule | User} | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Override state
+    const [showOverrideDialog, setShowOverrideDialog] = useState(false);
+    const [overrideEntry, setOverrideEntry] = useState<{start: string; end: string} | null>(null);
+    const [takingShift, setTakingShift] = useState<string | null>(null);
 
     useEffect(() => {
         return () => {
@@ -106,6 +115,53 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
         setPagingTarget(null);
     };
 
+    const handleTakeShift = async (entryStart: string, entryEnd: string) => {
+        if (!currentUser || !schedule) {
+            return;
+        }
+        const entryKey = `${entryStart}-${entryEnd}`;
+        setTakingShift(entryKey);
+        try {
+            // For current shift, start from now instead of the entry start
+            const now = new Date();
+            const start = new Date(entryStart) <= now ? now.toISOString() : entryStart;
+            await client.createOverride(schedule.id, start, entryEnd, currentUser.id);
+            setSuccessMessage('Shift taken successfully');
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+            if (onOverrideCreated) {
+                onOverrideCreated();
+            }
+        } catch (err) {
+            setSuccessMessage(null);
+            setError(err instanceof Error ? err.message : 'Failed to take shift');
+        } finally {
+            setTakingShift(null);
+        }
+    };
+
+    const [error, setError] = useState<string | null>(null);
+
+    const handleOpenOverrideDialog = (entryStart: string, entryEnd: string) => {
+        setOverrideEntry({start: entryStart, end: entryEnd});
+        setShowOverrideDialog(true);
+    };
+
+    const handleOverrideSuccess = () => {
+        setShowOverrideDialog(false);
+        setOverrideEntry(null);
+        setSuccessMessage('Override created successfully');
+        if (successTimeoutRef.current) {
+            clearTimeout(successTimeoutRef.current);
+        }
+        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+        if (onOverrideCreated) {
+            onOverrideCreated();
+        }
+    };
+
     if (loading) {
         return (
             <div
@@ -156,6 +212,22 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
                     }}
                 >
                     {successMessage}
+                </div>
+            )}
+            {error && (
+                <div
+                    className='error-message'
+                    role='alert'
+                    style={{
+                        backgroundColor: (theme.errorTextColor || '#d32f2f') + '15',
+                        color: theme.errorTextColor || '#d32f2f',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        marginBottom: '16px',
+                        fontSize: '14px',
+                    }}
+                >
+                    {error}
                 </div>
             )}
 
@@ -231,33 +303,28 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
                                     border: `2px solid ${isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor + '20'}`,
                                     borderRadius: '8px',
                                     marginBottom: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
                                     boxShadow: isCurrentlyOnCall ? `0 2px 8px ${theme.onlineIndicator}30` : 'none',
                                     position: 'relative' as const,
                                     opacity: isPastEntry ? 0.6 : 1,
                                 }}
                             >
-                                {entry.user.avatar_url && (
-                                    <img
-                                        className='user-avatar'
-                                        src={entry.user.avatar_url}
-                                        alt={entry.user.name}
-                                        style={{
-                                            width: '32px',
-                                            height: '32px',
-                                            borderRadius: '50%',
-                                            marginRight: '12px',
-                                        }}
-                                    />
-                                )}
-                                <div
-                                    className='user-info'
-                                    style={{flex: 1}}
-                                >
+                                <div style={{display: 'flex', alignItems: 'center'}}>
+                                    {entry.user.avatar_url && (
+                                        <img
+                                            className='user-avatar'
+                                            src={entry.user.avatar_url}
+                                            alt={entry.user.name}
+                                            style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                borderRadius: '50%',
+                                                marginRight: '12px',
+                                            }}
+                                        />
+                                    )}
                                     <div
-                                        className='user-name-row'
-                                        style={{display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto 0 0'}}
+                                        className='user-info'
+                                        style={{flex: 1, minWidth: 0}}
                                     >
                                         <div
                                             className='user-name'
@@ -265,71 +332,99 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
                                         >
                                             {entry.user.name || entry.user.summary}
                                         </div>
-                                        {isCurrentlyOnCall && (
+                                        {entry.user.email && (
                                             <div
-                                                className='oncall-badge'
-                                                style={{
-                                                    fontSize: '10px',
-                                                    fontWeight: 600,
-                                                    color: 'white',
-                                                    padding: '2px 6px',
-                                                    backgroundColor: theme.onlineIndicator,
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase' as const,
-                                                    letterSpacing: '0.5px',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '2px',
-                                                }}
+                                                className='user-email'
+                                                style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7}}
                                             >
-                                                {'🕐 ON-CALL'}
+                                                {entry.user.email}
                                             </div>
                                         )}
-                                    </div>
-                                    {entry.user.email && (
-                                        <div
-                                            className='user-email'
-                                            style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7}}
-                                        >
-                                            {entry.user.email}
-                                        </div>
-                                    )}
-                                    <div className='time-info'>
-                                        <div
-                                            className='relative-time'
-                                            style={{fontSize: '12px', color: isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor, fontWeight: isCurrentlyOnCall ? 600 : 400}}
-                                        >
-                                            {formatRelativeTime(startTime, endTime, now)}
-                                        </div>
-                                        <div
-                                            className='absolute-time'
-                                            style={{fontSize: '11px', color: theme.centerChannelColor, opacity: 0.5, marginTop: '2px'}}
-                                        >
-                                            {`${startTime.toLocaleDateString()} ${startTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - ${endTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`}
+                                        <div className='time-info'>
+                                            <div
+                                                className='relative-time'
+                                                style={{fontSize: '12px', color: isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor, fontWeight: isCurrentlyOnCall ? 600 : 400}}
+                                            >
+                                                {formatRelativeTime(startTime, endTime, now)}
+                                            </div>
+                                            <div
+                                                className='absolute-time'
+                                                style={{fontSize: '11px', color: theme.centerChannelColor, opacity: 0.5, marginTop: '2px'}}
+                                            >
+                                                {`${startTime.toLocaleDateString()} ${startTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - ${endTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                {isCurrentlyOnCall && (
-                                    <button
-                                        className='page-button'
-                                        onClick={handlePageSchedule}
-                                        aria-label={`Page ${entry.user.name || entry.user.summary}`}
-                                        style={{
-                                            backgroundColor: theme.buttonBg,
-                                            color: theme.buttonColor,
-                                            border: 'none',
-                                            borderRadius: '6px',
-                                            padding: '8px 12px',
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            marginLeft: '12px',
-                                            whiteSpace: 'nowrap' as const,
-                                            boxShadow: `0 2px 4px ${theme.centerChannelColor}20`,
-                                        }}
+                                {/* Action buttons */}
+                                {!isPastEntry && (
+                                    <div
+                                        className='entry-actions'
+                                        style={{display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '10px'}}
                                     >
-                                        {'📟 Page Now'}
-                                    </button>
+                                        {isCurrentlyOnCall && (
+                                            <button
+                                                className='page-button'
+                                                onClick={handlePageSchedule}
+                                                aria-label={`Page ${entry.user.name || entry.user.summary}`}
+                                                style={{
+                                                    backgroundColor: theme.dndIndicator || '#d32f2f',
+                                                    color: '#ffffff',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    padding: '5px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap' as const,
+                                                }}
+                                            >
+                                                {'Page Now'}
+                                            </button>
+                                        )}
+                                        {currentUser && entry.user.id !== currentUser.id && (
+                                            <button
+                                                className='take-shift-button'
+                                                onClick={() => handleTakeShift(entry.start, entry.end)}
+                                                disabled={takingShift === `${entry.start}-${entry.end}`}
+                                                aria-label='Take this shift'
+                                                style={{
+                                                    backgroundColor: theme.buttonBg,
+                                                    color: theme.buttonColor,
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    padding: '5px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    cursor: takingShift === `${entry.start}-${entry.end}` ? 'not-allowed' : 'pointer',
+                                                    opacity: takingShift === `${entry.start}-${entry.end}` ? 0.6 : 1,
+                                                    whiteSpace: 'nowrap' as const,
+                                                }}
+                                            >
+                                                {takingShift === `${entry.start}-${entry.end}` ? 'Taking...' : 'Take'}
+                                            </button>
+                                        )}
+                                        {currentUser && (
+                                            <button
+                                                className='override-button'
+                                                onClick={() => handleOpenOverrideDialog(entry.start, entry.end)}
+                                                aria-label='Override this shift'
+                                                style={{
+                                                    backgroundColor: 'transparent',
+                                                    color: theme.linkColor,
+                                                    border: `1px solid ${theme.linkColor}50`,
+                                                    borderRadius: '4px',
+                                                    padding: '5px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 500,
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap' as const,
+                                                }}
+                                            >
+                                                {'Override'}
+                                            </button>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </React.Fragment>
@@ -347,6 +442,21 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading}) => {
                         onSuccess={handlePagingSuccess}
                     />
                 </div>
+            )}
+
+            {showOverrideDialog && overrideEntry && schedule && (
+                <OverrideDialog
+                    theme={theme}
+                    scheduleId={schedule.id}
+                    scheduleName={schedule.name}
+                    defaultStart={overrideEntry.start}
+                    defaultEnd={overrideEntry.end}
+                    onClose={() => {
+                        setShowOverrideDialog(false);
+                        setOverrideEntry(null);
+                    }}
+                    onSuccess={handleOverrideSuccess}
+                />
             )}
         </div>
     );
