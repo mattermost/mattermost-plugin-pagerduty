@@ -670,11 +670,28 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             border: 'none',
                             padding: '4px 6px',
                             cursor: 'pointer',
-                            fontSize: '16px',
                             lineHeight: 1,
+                            display: 'flex',
+                            alignItems: 'center',
                         }}
                     >
-                        {'\u00D7'}
+                        <svg
+                            width='14'
+                            height='14'
+                            viewBox='0 0 24 24'
+                            fill='none'
+                            stroke='currentColor'
+                            strokeWidth='2'
+                            strokeLinecap='round'
+                            strokeLinejoin='round'
+                            aria-hidden='true'
+                        >
+                            <path d='M18 6L6 18'/>
+                            <path d='M15 2l3 3-2 2'/>
+                            <path d='M22 9l-3-3-2 2'/>
+                            <path d='M6 15l-2 2 3 3'/>
+                            <path d='M2 18l2-2 3 3'/>
+                        </svg>
                     </button>
                 </div>
             </div>
