@@ -428,14 +428,14 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         xmlns='http://www.w3.org/2000/svg'
                         style={{marginBottom: '16px'}}
                     >
-                        <rect
-                            width='64'
-                            height='64'
-                            rx='8'
+                        <circle
+                            cx='32'
+                            cy='32'
+                            r='32'
                             fill='#06AC38'
                         />
                         <path
-                            d='M 16 16 L 32 16 Q 40 16 44 20 Q 48 24 48 32 Q 48 40 44 44 Q 40 48 32 48 L 24 48 L 24 56 L 16 56 Z M 24 24 L 24 40 L 32 40 Q 36 40 38 38 Q 40 36 40 32 Q 40 28 38 26 Q 36 24 32 24 Z'
+                            d='M 16 12 L 32 12 Q 40 12 44 16 Q 48 20 48 28 Q 48 36 44 40 Q 40 44 32 44 L 24 44 L 24 52 L 16 52 Z M 24 20 L 24 36 L 32 36 Q 36 36 38 34 Q 40 32 40 28 Q 40 24 38 22 Q 36 20 32 20 Z'
                             fill='white'
                         />
                     </svg>
