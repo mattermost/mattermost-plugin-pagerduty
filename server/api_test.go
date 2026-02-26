@@ -6,9 +6,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+// newTestAPI creates a mock API with common log expectations for api_test.go
+func newTestAPI() *plugintest.API {
+	api := &plugintest.API{}
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	return api
+}
 
 func TestPlugin_handleError(t *testing.T) {
 	tests := []struct {
@@ -68,49 +80,56 @@ func TestPlugin_handleError(t *testing.T) {
 }
 
 func TestPlugin_MattermostAuthorizationRequired(t *testing.T) {
-	tests := []struct {
-		name           string
-		userID         string
-		expectedStatus int
-		expectedBody   string
-	}{
-		{
-			name:           "with user ID",
-			userID:         "test-user-id",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "OK",
-		},
-		{
-			name:           "without user ID",
-			userID:         "",
-			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Not authorized\n",
-		},
-	}
+	t.Run("with user ID", func(t *testing.T) {
+		api := newTestAPI()
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.client = pluginapi.NewClient(api, nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			plugin := &Plugin{}
-
-			testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte("OK"))
-			})
-
-			handler := plugin.MattermostAuthorizationRequired(testHandler)
-
-			req := httptest.NewRequest("GET", "/test", nil)
-			if tt.userID != "" {
-				req.Header.Set("Mattermost-User-ID", tt.userID)
-			}
-			w := httptest.NewRecorder()
-
-			handler.ServeHTTP(w, req)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			assert.Equal(t, tt.expectedBody, w.Body.String())
+		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
 		})
-	}
+
+		handler := p.MattermostAuthorizationRequired(testHandler)
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Mattermost-User-ID", "test-user-id")
+		w := httptest.NewRecorder()
+
+		handler.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "OK", w.Body.String())
+	})
+
+	t.Run("without user ID returns JSON error", func(t *testing.T) {
+		api := newTestAPI()
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.client = pluginapi.NewClient(api, nil)
+
+		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		})
+
+		handler := p.MattermostAuthorizationRequired(testHandler)
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		w := httptest.NewRecorder()
+
+		handler.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var errResp map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.NoError(t, err)
+		assert.Equal(t, "not_authorized", errResp["id"])
+		assert.Contains(t, errResp["message"], "Not authorized")
+	})
 }
 
 func TestPlugin_getConfiguration(t *testing.T) {

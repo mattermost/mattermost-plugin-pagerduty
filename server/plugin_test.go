@@ -303,14 +303,18 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 
-			plugin := &Plugin{}
-			plugin.SetAPI(api)
-			plugin.client = pluginapi.NewClient(api, nil)
-			plugin.createPagerDutyClient = pagerduty.NewOAuthClient
+			p := &Plugin{}
+			p.SetAPI(api)
+			p.client = pluginapi.NewClient(api, nil)
+			p.createPagerDutyClient = pagerduty.NewOAuthClient
+			p.kvstore = &mockKVStore{}
+			p.configuration = &configuration{}
 
 			if tt.setupPlugin != nil {
-				tt.setupPlugin(plugin)
+				tt.setupPlugin(p)
 			}
+
+			p.router = p.initRouter()
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, tt.path, nil)
@@ -318,7 +322,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 				r.Header.Set("Mattermost-User-ID", tt.userID)
 			}
 
-			plugin.ServeHTTP(nil, w, r)
+			p.ServeHTTP(nil, w, r)
 
 			result := w.Result()
 			assert.NotNil(t, result)

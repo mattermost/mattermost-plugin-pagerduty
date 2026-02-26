@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 
+	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/pkg/errors"
@@ -47,6 +49,9 @@ type Plugin struct {
 	// botID is the Mattermost user ID for the PagerDuty bot.
 	botID string
 
+	// router is the HTTP router for all plugin endpoints, initialized once in OnActivate.
+	router *mux.Router
+
 	// onCallMonitor runs background on-call change detection.
 	onCallMonitor *OnCallMonitor
 }
@@ -89,6 +94,9 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(err, "failed to register slash command")
 	}
 
+	// Initialize HTTP router
+	p.router = p.initRouter()
+
 	// Start the on-call monitor background job
 	p.onCallMonitor = NewOnCallMonitor(p)
 	p.onCallMonitor.Start()
@@ -130,6 +138,11 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 
 	config := p.getConfiguration()
 	return p.createPagerDutyClient(token.AccessToken, config.APIBaseURL), nil
+}
+
+// ServeHTTP handles HTTP requests to the plugin.
+func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Request) {
+	p.router.ServeHTTP(w, r)
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

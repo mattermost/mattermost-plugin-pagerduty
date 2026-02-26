@@ -26,6 +26,7 @@ func newTestPlugin(api *plugintest.API) *Plugin {
 	p.kvstore = &mockKVStore{}
 	p.configuration = &configuration{}
 	p.createPagerDutyClient = pagerduty.NewOAuthClient
+	p.router = p.initRouter()
 	return p
 }
 

@@ -5,11 +5,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
-// ServeHTTP handles HTTP requests to the plugin.
-func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
+// initRouter creates and configures the HTTP router for all plugin endpoints.
+// Called once during OnActivate.
+func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
 
 	// Webhook endpoint — NOT protected by Mattermost auth (receives requests from PagerDuty)
@@ -53,14 +53,18 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	authRouter.HandleFunc("/notification-prefs", p.handleGetNotificationPrefs).Methods(http.MethodGet)
 	authRouter.HandleFunc("/notification-prefs", p.handleSetNotificationPrefs).Methods(http.MethodPut)
 
-	router.ServeHTTP(w, r)
+	return router
 }
 
 func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("Mattermost-User-ID")
 		if userID == "" {
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
+			p.handleError(w, r, &APIError{
+				ID:         "not_authorized",
+				Message:    "Not authorized. Please log in to Mattermost.",
+				StatusCode: http.StatusUnauthorized,
+			})
 			return
 		}
 
