@@ -74,6 +74,10 @@ func (p *Plugin) OnActivate() error {
 	p.siteURL = *config.ServiceSettings.SiteURL
 	p.client.Log.Debug("Site URL configured", "url", p.siteURL)
 
+	// Initialize HTTP router early so API endpoints are available even if
+	// optional features (bot, slash command) fail to initialize.
+	p.router = p.initRouter()
+
 	// Log plugin configuration status
 	pluginConfig := p.getConfiguration()
 	if err := pluginConfig.IsValid(); err != nil {
@@ -93,9 +97,6 @@ func (p *Plugin) OnActivate() error {
 		p.client.Log.Error("Failed to register slash command", "error", err)
 		return errors.Wrap(err, "failed to register slash command")
 	}
-
-	// Initialize HTTP router
-	p.router = p.initRouter()
 
 	// Start the on-call monitor background job
 	p.onCallMonitor = NewOnCallMonitor(p)
@@ -142,6 +143,10 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 
 // ServeHTTP handles HTTP requests to the plugin.
 func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Request) {
+	if p.router == nil {
+		http.Error(w, "Plugin not initialized", http.StatusServiceUnavailable)
+		return
+	}
 	p.router.ServeHTTP(w, r)
 }
 
