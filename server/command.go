@@ -27,7 +27,7 @@ func (p *Plugin) registerCommand() error {
 		DisplayName:      "PagerDuty",
 		Description:      "Manage PagerDuty notifications and channel subscriptions",
 		AutoComplete:     true,
-		AutoCompleteHint: "[subscribe|unsubscribe|list|notify|webhook]",
+		AutoCompleteHint: "[connect|disconnect|subscribe|unsubscribe|list|notify|webhook]",
 		AutoCompleteDesc: "PagerDuty integration commands",
 	}
 
@@ -68,6 +68,10 @@ func (p *Plugin) handleCommand(args *model.CommandArgs) (*model.CommandResponse,
 
 	subcommand := parts[1]
 	switch subcommand {
+	case "connect":
+		return p.executeConnect(args)
+	case "disconnect":
+		return p.executeDisconnect(args)
 	case "subscribe":
 		return p.executeSubscribe(args, parts[2:])
 	case "unsubscribe":
@@ -90,6 +94,8 @@ func (p *Plugin) commandHelp() *model.CommandResponse {
 
 | Command | Description |
 |---------|-------------|
+| ` + "`/pagerduty connect`" + ` | Connect your PagerDuty account |
+| ` + "`/pagerduty disconnect`" + ` | Disconnect your PagerDuty account |
 | ` + "`/pagerduty subscribe [events] [--service ID]`" + ` | Subscribe this channel to PagerDuty events |
 | ` + "`/pagerduty unsubscribe`" + ` | Unsubscribe this channel from PagerDuty events |
 | ` + "`/pagerduty list`" + ` | Show this channel's subscription details |
@@ -110,6 +116,32 @@ func (p *Plugin) commandHelp() *model.CommandResponse {
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         text,
 	}
+}
+
+// --- Connect / Disconnect ---
+
+func (p *Plugin) executeConnect(args *model.CommandArgs) (*model.CommandResponse, error) {
+	// Check if already connected
+	token, _ := p.kvstore.GetUserToken(args.UserId)
+	if token != nil {
+		return ephemeral("You are already connected to PagerDuty. Run `/pagerduty disconnect` first to reconnect with updated permissions."), nil
+	}
+
+	connectURL := fmt.Sprintf("%s/plugins/%s/api/v1/oauth/connect", p.siteURL, pluginID)
+	return ephemeral(fmt.Sprintf("[Click here to connect your PagerDuty account](%s)", connectURL)), nil
+}
+
+func (p *Plugin) executeDisconnect(args *model.CommandArgs) (*model.CommandResponse, error) {
+	token, _ := p.kvstore.GetUserToken(args.UserId)
+	if token == nil {
+		return ephemeral("You are not connected to PagerDuty. Run `/pagerduty connect` to connect."), nil
+	}
+
+	if err := p.kvstore.DeleteUserToken(args.UserId); err != nil {
+		return ephemeral("Failed to disconnect: " + err.Error()), nil
+	}
+
+	return ephemeral(":white_check_mark: You have been disconnected from PagerDuty. Run `/pagerduty connect` to reconnect."), nil
 }
 
 // --- Subscribe ---
