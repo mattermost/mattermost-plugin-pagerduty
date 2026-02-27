@@ -21,7 +21,7 @@ const (
 	pagerDutyAuthURL  = "https://identity.pagerduty.com/oauth/authorize"
 	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token"
 
-	oauthScopes     = "schedules.read oncalls.read services.read incidents.read incidents.write users.read"
+	oauthScopes     = "schedules.read oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write"
 	oauthStateExpiry = 10 * time.Minute
 )
 
