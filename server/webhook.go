@@ -64,7 +64,8 @@ func (p *Plugin) handlePagerDutyWebhook(w http.ResponseWriter, r *http.Request) 
 }
 
 // verifyWebhookSignature verifies the HMAC-SHA256 signature from PagerDuty.
-// The signature header format is "v1=<hex-encoded-signature>".
+// The signature header can contain one or more comma-separated signatures,
+// each in the format "v1=<hex-encoded-signature>".
 func (p *Plugin) verifyWebhookSignature(body []byte, signatureHeader string) bool {
 	// Get the secret from either the webhook registration or config
 	secret := p.getWebhookSecret()
@@ -75,28 +76,38 @@ func (p *Plugin) verifyWebhookSignature(body []byte, signatureHeader string) boo
 	}
 
 	if signatureHeader == "" {
+		p.client.Log.Warn("Webhook request missing signature header")
 		return false
 	}
 
-	// Parse the signature header (format: "v1=<signature>")
-	parts := strings.SplitN(signatureHeader, "=", 2)
-	if len(parts) != 2 || parts[0] != "v1" {
-		p.client.Log.Warn("Invalid webhook signature format", "header", signatureHeader)
-		return false
-	}
-
-	expectedSignature, err := hex.DecodeString(parts[1])
-	if err != nil {
-		p.client.Log.Warn("Failed to decode webhook signature", "error", err.Error())
-		return false
-	}
-
-	// Compute HMAC-SHA256
+	// Compute expected HMAC-SHA256
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	computedSignature := mac.Sum(nil)
 
-	return hmac.Equal(computedSignature, expectedSignature)
+	// The header may contain multiple comma-separated signatures (e.g. "v1=abc,v1=def").
+	// Accept the request if ANY signature matches.
+	for _, sig := range strings.Split(signatureHeader, ",") {
+		sig = strings.TrimSpace(sig)
+		parts := strings.SplitN(sig, "=", 2)
+		if len(parts) != 2 || parts[0] != "v1" {
+			continue
+		}
+
+		expectedSignature, err := hex.DecodeString(parts[1])
+		if err != nil {
+			continue
+		}
+
+		if hmac.Equal(computedSignature, expectedSignature) {
+			return true
+		}
+	}
+
+	p.client.Log.Warn("Webhook signature mismatch — no provided signature matched the computed HMAC",
+		"header", signatureHeader,
+	)
+	return false
 }
 
 // getWebhookSecret retrieves the webhook secret from KV store or config.

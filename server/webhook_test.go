@@ -103,6 +103,30 @@ func TestVerifyWebhookSignature(t *testing.T) {
 		assert.False(t, p.verifyWebhookSignature(body, "invalid-format"))
 	})
 
+	t.Run("multiple comma-separated signatures", func(t *testing.T) {
+		secret := "test-secret-123"
+		p.kvstore = &mockKVStore{
+			getWebhookRegistrationFunc: func() (*WebhookRegistration, error) {
+				return &WebhookRegistration{Secret: secret}, nil
+			},
+		}
+
+		body := []byte(`{"event":{"id":"test"}}`)
+		validSig := signPayload(body, secret)
+
+		// Valid signature is second in the list
+		header := "v1=deadbeef," + validSig
+		assert.True(t, p.verifyWebhookSignature(body, header))
+
+		// Valid signature is first in the list
+		header2 := validSig + ",v1=deadbeef"
+		assert.True(t, p.verifyWebhookSignature(body, header2))
+
+		// No valid signatures
+		header3 := "v1=deadbeef,v1=cafebabe"
+		assert.False(t, p.verifyWebhookSignature(body, header3))
+	})
+
 	t.Run("config fallback secret", func(t *testing.T) {
 		secret := "config-secret"
 		p.kvstore = &mockKVStore{} // No registration
