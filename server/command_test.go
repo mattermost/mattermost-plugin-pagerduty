@@ -5,7 +5,6 @@ import (
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/store/kvstore"
 )
@@ -15,12 +14,12 @@ func TestExecuteCommand(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "PagerDuty Plugin Commands")
 		assert.Equal(t, model.CommandResponseTypeEphemeral, resp.ResponseType)
 	})
@@ -29,12 +28,12 @@ func TestExecuteCommand(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty help",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "PagerDuty Plugin Commands")
 	})
 
@@ -42,12 +41,12 @@ func TestExecuteCommand(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty unknown",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "PagerDuty Plugin Commands")
 	})
 }
@@ -57,13 +56,13 @@ func TestExecuteSubscribe(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "subscribed to PagerDuty events")
 	})
 
@@ -71,13 +70,13 @@ func TestExecuteSubscribe(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe incident.triggered,incident.resolved",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "incident.triggered")
 		assert.Contains(t, resp.Text, "incident.resolved")
 	})
@@ -86,13 +85,13 @@ func TestExecuteSubscribe(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe --service PSERVICE1",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "subscribed to PagerDuty events")
 		assert.Contains(t, resp.Text, "PSERVICE1")
 	})
@@ -101,13 +100,13 @@ func TestExecuteSubscribe(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe invalid.event",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "Unknown event type")
 	})
 }
@@ -117,13 +116,13 @@ func TestExecuteUnsubscribe(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty unsubscribe",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "unsubscribed")
 	})
 }
@@ -133,13 +132,13 @@ func TestExecuteList(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty list",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "not subscribed")
 	})
 
@@ -156,13 +155,13 @@ func TestExecuteList(t *testing.T) {
 			},
 		}
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty list",
 			UserId:    "user-1",
 			ChannelId: "channel-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "incident.triggered")
 		assert.Contains(t, resp.Text, "svc-1")
 	})
@@ -173,12 +172,12 @@ func TestExecuteNotify(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty notify on",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "enabled")
 	})
 
@@ -186,12 +185,12 @@ func TestExecuteNotify(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty notify off",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "disabled")
 	})
 
@@ -208,12 +207,12 @@ func TestExecuteNotify(t *testing.T) {
 			},
 		}
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty notify status",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "enabled")
 		assert.Contains(t, resp.Text, "On-call start")
 	})
@@ -222,12 +221,12 @@ func TestExecuteNotify(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty notify",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "Usage")
 	})
 }
@@ -237,12 +236,12 @@ func TestExecuteWebhookStatus(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty webhook status",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "No PagerDuty webhook")
 	})
 
@@ -257,12 +256,12 @@ func TestExecuteWebhookStatus(t *testing.T) {
 			},
 		}
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty webhook status",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "sub-123")
 		assert.Contains(t, resp.Text, "Active")
 	})
@@ -277,12 +276,12 @@ func TestExecuteWebhookSetup(t *testing.T) {
 
 		p := newTestPlugin(api)
 
-		resp, err := p.ExecuteCommand(nil, &model.CommandArgs{
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command: "/pagerduty webhook setup",
 			UserId:  "user-1",
 		})
 
-		require.NoError(t, err)
+		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "system administrators")
 	})
 }

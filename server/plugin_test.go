@@ -189,6 +189,7 @@ func setupMockAPIForActivation(api *plugintest.API, siteURL string) {
 	api.On("PatchBot", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	// Slash command registration mock
+	api.On("UnregisterCommand", mock.Anything, mock.Anything).Return(nil).Maybe()
 	api.On("RegisterCommand", mock.Anything).Return(nil).Maybe()
 }
 
@@ -418,6 +419,7 @@ func TestPlugin_Configuration(t *testing.T) {
 			config.OAuthClientSecret = "loaded-client-secret"
 			config.APIBaseURL = "https://api.pagerduty.com"
 		}).Return(nil)
+		api.On("UnregisterCommand", mock.Anything, mock.Anything).Return(nil).Maybe()
 		api.On("RegisterCommand", mock.Anything).Return(nil)
 		api.On("LogInfo", mock.Anything).Return().Maybe()
 		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
