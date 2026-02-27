@@ -418,6 +418,7 @@ func TestPlugin_Configuration(t *testing.T) {
 			config.OAuthClientSecret = "loaded-client-secret"
 			config.APIBaseURL = "https://api.pagerduty.com"
 		}).Return(nil)
+		api.On("RegisterCommand", mock.Anything).Return(nil)
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)

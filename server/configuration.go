@@ -83,6 +83,17 @@ func (p *Plugin) OnConfigurationChange() error {
 
 	p.setConfiguration(configuration)
 
+	// Re-register the slash command on every config change. The Mattermost server
+	// may clear the plugin command registry during config-triggered state syncs
+	// (e.g. when EnablePlugin is called after UploadPluginForced during deploy).
+	// OnConfigurationChange is called before OnActivate on initial startup, so
+	// guard against the client not yet being initialized.
+	if p.client != nil {
+		if err := p.registerCommand(); err != nil {
+			p.client.Log.Warn("Failed to re-register slash command on config change", "error", err)
+		}
+	}
+
 	return nil
 }
 
