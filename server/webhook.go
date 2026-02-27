@@ -50,7 +50,7 @@ func (p *Plugin) handlePagerDutyWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	p.client.Log.Info("Received PagerDuty webhook",
+	p.client.Log.Debug("Received PagerDuty webhook",
 		"event_id", payload.Event.ID,
 		"event_type", payload.Event.EventType,
 		"resource_type", payload.Event.ResourceType,

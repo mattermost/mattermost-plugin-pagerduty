@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/pkg/errors"
 )
 
@@ -19,13 +20,12 @@ func (p *Plugin) ensureBot() error {
 		Username:    botUsername,
 		DisplayName: botDisplayName,
 		Description: botDescription,
-	})
+	}, pluginapi.ProfileImagePath("assets/profile.png"))
 	if err != nil {
 		return errors.Wrap(err, "failed to ensure PagerDuty bot")
 	}
 
 	p.botID = botID
-	p.client.Log.Info("PagerDuty bot ensured", "bot_id", botID)
 	return nil
 }
 

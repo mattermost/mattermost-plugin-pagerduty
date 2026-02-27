@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -167,7 +168,11 @@ func (m *mockKVStore) DeleteOAuthState(state string) error {
 	return nil
 }
 
-func setupMockAPIForActivation(api *plugintest.API, siteURL string) {
+func setupMockAPIForActivation(api *plugintest.API, siteURL string) { //nolint:unparam
+	// Create the assets directory and a minimal profile image for EnsureBot
+	_ = os.MkdirAll("/tmp/plugin/assets", 0o755)
+	_ = os.WriteFile("/tmp/plugin/assets/profile.png", []byte{0x89, 0x50, 0x4E, 0x47}, 0o644)
+
 	api.On("GetConfig").Return(&model.Config{
 		ServiceSettings: model.ServiceSettings{
 			SiteURL: &siteURL,
@@ -187,6 +192,7 @@ func setupMockAPIForActivation(api *plugintest.API, siteURL string) {
 	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
 	api.On("EnsureBotUser", mock.Anything).Return("bot-user-id", nil).Maybe()
 	api.On("PatchBot", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	api.On("SetProfileImage", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Slash command registration mock
 	api.On("UnregisterCommand", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -245,7 +251,7 @@ func TestPlugin_OnDeactivate(t *testing.T) {
 	api := &plugintest.API{}
 	defer api.AssertExpectations(t)
 
-	api.On("LogInfo", mock.Anything).Return()
+	api.On("LogDebug", mock.Anything).Return()
 
 	plugin := &Plugin{}
 	plugin.SetAPI(api)
@@ -423,6 +429,8 @@ func TestPlugin_Configuration(t *testing.T) {
 		api.On("RegisterCommand", mock.Anything).Return(nil)
 		api.On("LogInfo", mock.Anything).Return().Maybe()
 		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On("LogDebug", mock.Anything).Return().Maybe()
+		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)

@@ -12,8 +12,7 @@ import ScheduleDetails from './schedule_details';
 import ScheduleList from './schedule_list';
 import SubscriptionManager from './subscription_manager';
 
-import client from '@/client/client';
-import {ClientError} from '@/client/client';
+import client, {ClientError} from '@/client/client';
 import type {Incident, IncidentFilters, OnCall, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 

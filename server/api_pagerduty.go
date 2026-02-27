@@ -62,7 +62,7 @@ func (p *Plugin) handleGetSchedules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved schedules", "count", len(schedules.Schedules))
+	p.client.Log.Debug("Successfully retrieved schedules", "count", len(schedules.Schedules))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(schedules); err != nil {
 		p.client.Log.Error("Failed to encode schedules response", "error", err.Error())
@@ -99,7 +99,7 @@ func (p *Plugin) handleGetOnCalls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved on-calls", "count", len(oncalls.OnCalls))
+	p.client.Log.Debug("Successfully retrieved on-calls", "count", len(oncalls.OnCalls))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(oncalls); err != nil {
 		p.client.Log.Error("Failed to encode on-calls response", "error", err.Error())
@@ -141,7 +141,7 @@ func (p *Plugin) handleGetScheduleDetails(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved schedule details", "schedule_id", scheduleID, "name", schedule.Schedule.Name)
+	p.client.Log.Debug("Successfully retrieved schedule details", "schedule_id", scheduleID, "name", schedule.Schedule.Name)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(schedule); err != nil {
 		p.client.Log.Error("Failed to encode schedule response", "error", err.Error())
@@ -167,7 +167,7 @@ func (p *Plugin) handleGetServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved services", "count", len(services.Services))
+	p.client.Log.Debug("Successfully retrieved services", "count", len(services.Services))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(services); err != nil {
 		p.client.Log.Error("Failed to encode services response", "error", err.Error())
@@ -226,7 +226,7 @@ func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully created incident", "incident_id", incident.Incident.ID, "title", incident.Incident.Title)
+	p.client.Log.Debug("Successfully created incident", "incident_id", incident.Incident.ID, "title", incident.Incident.Title)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(incident); err != nil {
@@ -302,7 +302,7 @@ func (p *Plugin) handleGetIncidents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved incidents", "count", len(incidents.Incidents))
+	p.client.Log.Debug("Successfully retrieved incidents", "count", len(incidents.Incidents))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(incidents); err != nil {
 		p.client.Log.Error("Failed to encode incidents response", "error", err.Error())
@@ -403,7 +403,7 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully updated incident", "incident_id", incidentID, "status", req.Status)
+	p.client.Log.Debug("Successfully updated incident", "incident_id", incidentID, "status", req.Status)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(incident); err != nil {
 		p.client.Log.Error("Failed to encode update incident response", "error", err.Error())
@@ -440,7 +440,7 @@ func (p *Plugin) handleGetIncidentNotes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved incident notes", "incident_id", incidentID, "count", len(notes.Notes))
+	p.client.Log.Debug("Successfully retrieved incident notes", "incident_id", incidentID, "count", len(notes.Notes))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(notes); err != nil {
 		p.client.Log.Error("Failed to encode incident notes response", "error", err.Error())
@@ -466,7 +466,7 @@ func (p *Plugin) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved current user", "pd_user_id", user.User.ID, "name", user.User.Name)
+	p.client.Log.Debug("Successfully retrieved current user", "pd_user_id", user.User.ID, "name", user.User.Name)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		p.client.Log.Error("Failed to encode current user response", "error", err.Error())
@@ -494,7 +494,7 @@ func (p *Plugin) handleGetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully retrieved users", "count", len(users.Users))
+	p.client.Log.Debug("Successfully retrieved users", "count", len(users.Users))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(users); err != nil {
 		p.client.Log.Error("Failed to encode users response", "error", err.Error())
@@ -559,7 +559,7 @@ func (p *Plugin) handleCreateOverride(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("Successfully created override", "schedule_id", scheduleID, "override_id", override.Override.ID)
+	p.client.Log.Debug("Successfully created override", "schedule_id", scheduleID, "override_id", override.Override.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(override); err != nil {
@@ -635,7 +635,7 @@ func (p *Plugin) handleCreateIncidentNote(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	p.client.Log.Info("Successfully created incident note", "incident_id", incidentID)
+	p.client.Log.Debug("Successfully created incident note", "incident_id", incidentID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(note); err != nil {

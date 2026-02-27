@@ -202,7 +202,7 @@ func (p *Plugin) handleOAuthDisconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("User disconnected PagerDuty account", "user_id", userID)
+	p.client.Log.Debug("User disconnected PagerDuty account", "user_id", userID)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
 		p.client.Log.Error("Failed to encode disconnect response", "error", err.Error())

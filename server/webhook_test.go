@@ -181,6 +181,7 @@ func TestHandlePagerDutyWebhook(t *testing.T) {
 		api := &plugintest.API{}
 		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 

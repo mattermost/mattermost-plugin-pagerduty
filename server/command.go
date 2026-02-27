@@ -16,7 +16,7 @@ const commandTrigger = "pagerduty"
 
 // registerCommand registers the /pagerduty slash command.
 func (p *Plugin) registerCommand() error {
-	p.client.Log.Info("registerCommand: attempting to register /pagerduty slash command")
+	p.client.Log.Debug("Registering /pagerduty slash command")
 
 	// Optimistically unregister before registering to clear stale state,
 	// following the pattern used by the Jira plugin.
@@ -32,11 +32,11 @@ func (p *Plugin) registerCommand() error {
 	}
 
 	if err := p.client.SlashCommand.Register(cmd); err != nil {
-		p.client.Log.Error("registerCommand: RegisterCommand API call FAILED", "error", err, "trigger", commandTrigger)
+		p.client.Log.Error("Failed to register slash command", "error", err)
 		return err
 	}
 
-	p.client.Log.Info("registerCommand: RegisterCommand API call SUCCEEDED", "trigger", commandTrigger)
+	p.client.Log.Debug("Slash command registered", "trigger", commandTrigger)
 	return nil
 }
 
@@ -45,15 +45,11 @@ func (p *Plugin) registerCommand() error {
 // exactly. The Mattermost plugin RPC layer uses reflection to check the method
 // signature; returning plain error causes the hook to be treated as unimplemented.
 func (p *Plugin) ExecuteCommand(_ *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
-	p.client.Log.Info("ExecuteCommand: slash command received",
-		"command", args.Command,
-		"user_id", args.UserId,
-		"channel_id", args.ChannelId,
-	)
+	p.client.Log.Debug("Slash command received", "command", args.Command, "user_id", args.UserId)
 
 	resp, err := p.handleCommand(args)
 	if err != nil {
-		p.client.Log.Error("ExecuteCommand: internal error", "error", err)
+		p.client.Log.Error("Slash command failed", "error", err)
 		return ephemeral("An internal error occurred: " + err.Error()), nil
 	}
 	return resp, nil
