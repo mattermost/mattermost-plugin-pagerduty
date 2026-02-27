@@ -43,6 +43,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockSchedules);
@@ -90,6 +91,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockOnCalls);
@@ -110,6 +112,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockOnCalls);
@@ -147,6 +150,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockSchedule);
@@ -182,6 +186,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockIncidents);
@@ -231,6 +236,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({status: 'acknowledged'}),
             }));
@@ -267,6 +273,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockNotes);
@@ -291,6 +298,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({content: 'Root cause identified'}),
             }));
@@ -323,6 +331,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
             expect(result).toEqual(mockStatus);
@@ -370,6 +379,7 @@ describe('Client', () => {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }));
         });

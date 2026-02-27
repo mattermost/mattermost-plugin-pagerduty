@@ -34,6 +34,7 @@ export class Client {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 ...options,
                 signal: controller.signal,
