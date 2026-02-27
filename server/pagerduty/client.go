@@ -421,3 +421,62 @@ func (c *Client) CreateIncidentNote(incidentID, content, fromEmail string) (*Cre
 
 	return &response, nil
 }
+
+// --- Webhook Subscription Management ---
+
+// CreateWebhookSubscription creates a V3 webhook subscription in PagerDuty.
+func (c *Client) CreateWebhookSubscription(webhookURL, secret, description string, events []string, filterType, filterID string) (*WebhookSubscriptionResult, error) {
+	filter := WebhookFilter{
+		Type: filterType,
+	}
+	if filterID != "" {
+		filter.ID = filterID
+	}
+
+	request := WebhookSubscriptionRequest{
+		WebhookSubscription: WebhookSubscriptionBody{
+			Type: "webhook_subscription",
+			DeliveryMethod: WebhookDeliveryMethod{
+				Type:   "http_delivery_method",
+				URL:    webhookURL,
+				Secret: secret,
+			},
+			Events:      events,
+			Filter:      filter,
+			Description: description,
+		},
+	}
+
+	body, err := c.doRequestWithBody("POST", "/webhook_subscriptions", nil, request)
+	if err != nil {
+		return nil, err
+	}
+
+	var response WebhookSubscriptionResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal webhook subscription response")
+	}
+
+	return &response.WebhookSubscription, nil
+}
+
+// DeleteWebhookSubscription removes a webhook subscription from PagerDuty.
+func (c *Client) DeleteWebhookSubscription(subscriptionID string) error {
+	_, err := c.doRequest("DELETE", fmt.Sprintf("/webhook_subscriptions/%s", subscriptionID), nil)
+	return err
+}
+
+// ListWebhookSubscriptions retrieves all webhook subscriptions.
+func (c *Client) ListWebhookSubscriptions() ([]WebhookSubscriptionResult, error) {
+	body, err := c.doRequest("GET", "/webhook_subscriptions", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response WebhookSubscriptionsListResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal webhook subscriptions response")
+	}
+
+	return response.WebhookSubscriptions, nil
+}

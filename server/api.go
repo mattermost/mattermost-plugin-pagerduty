@@ -5,46 +5,66 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
-// ServeHTTP handles HTTP requests to the plugin.
-func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
+// initRouter creates and configures the HTTP router for all plugin endpoints.
+// Called once during OnActivate.
+func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
 
-	// Middleware to require that the user is logged in
-	router.Use(p.MattermostAuthorizationRequired)
+	// Webhook endpoint — NOT protected by Mattermost auth (receives requests from PagerDuty)
+	router.HandleFunc("/api/v1/webhook", p.handlePagerDutyWebhook).Methods(http.MethodPost)
 
-	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+	// All other routes require Mattermost auth
+	authRouter := router.PathPrefix("/api/v1").Subrouter()
+	authRouter.Use(p.MattermostAuthorizationRequired)
 
 	// OAuth endpoints
-	apiRouter.HandleFunc("/oauth/connect", p.handleOAuthConnect).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/oauth/callback", p.handleOAuthCallback).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/oauth/disconnect", p.handleOAuthDisconnect).Methods(http.MethodPost)
-	apiRouter.HandleFunc("/oauth/status", p.handleOAuthConnectionStatus).Methods(http.MethodGet)
+	authRouter.HandleFunc("/oauth/connect", p.handleOAuthConnect).Methods(http.MethodGet)
+	authRouter.HandleFunc("/oauth/callback", p.handleOAuthCallback).Methods(http.MethodGet)
+	authRouter.HandleFunc("/oauth/disconnect", p.handleOAuthDisconnect).Methods(http.MethodPost)
+	authRouter.HandleFunc("/oauth/status", p.handleOAuthConnectionStatus).Methods(http.MethodGet)
 
 	// PagerDuty endpoints
-	apiRouter.HandleFunc("/schedules", p.handleGetSchedules).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/oncalls", p.handleGetOnCalls).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/schedule", p.handleGetScheduleDetails).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/services", p.handleGetServices).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/incidents", p.handleGetIncidents).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/incidents", p.handleCreateIncident).Methods(http.MethodPost)
-	apiRouter.HandleFunc("/incidents/{id}", p.handleUpdateIncident).Methods(http.MethodPut)
-	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleGetIncidentNotes).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/incidents/{id}/notes", p.handleCreateIncidentNote).Methods(http.MethodPost)
-	apiRouter.HandleFunc("/users/me", p.handleGetCurrentUser).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/users", p.handleGetUsers).Methods(http.MethodGet)
-	apiRouter.HandleFunc("/schedules/{id}/overrides", p.handleCreateOverride).Methods(http.MethodPost)
+	authRouter.HandleFunc("/schedules", p.handleGetSchedules).Methods(http.MethodGet)
+	authRouter.HandleFunc("/oncalls", p.handleGetOnCalls).Methods(http.MethodGet)
+	authRouter.HandleFunc("/schedule", p.handleGetScheduleDetails).Methods(http.MethodGet)
+	authRouter.HandleFunc("/services", p.handleGetServices).Methods(http.MethodGet)
+	authRouter.HandleFunc("/incidents", p.handleGetIncidents).Methods(http.MethodGet)
+	authRouter.HandleFunc("/incidents", p.handleCreateIncident).Methods(http.MethodPost)
+	authRouter.HandleFunc("/incidents/{id}", p.handleUpdateIncident).Methods(http.MethodPut)
+	authRouter.HandleFunc("/incidents/{id}/notes", p.handleGetIncidentNotes).Methods(http.MethodGet)
+	authRouter.HandleFunc("/incidents/{id}/notes", p.handleCreateIncidentNote).Methods(http.MethodPost)
+	authRouter.HandleFunc("/users/me", p.handleGetCurrentUser).Methods(http.MethodGet)
+	authRouter.HandleFunc("/users", p.handleGetUsers).Methods(http.MethodGet)
+	authRouter.HandleFunc("/schedules/{id}/overrides", p.handleCreateOverride).Methods(http.MethodPost)
 
-	router.ServeHTTP(w, r)
+	// Subscription management endpoints
+	authRouter.HandleFunc("/subscriptions", p.handleGetSubscriptions).Methods(http.MethodGet)
+	authRouter.HandleFunc("/subscriptions", p.handleCreateSubscription).Methods(http.MethodPost)
+	authRouter.HandleFunc("/subscriptions/{channelId}", p.handleDeleteSubscription).Methods(http.MethodDelete)
+
+	// Webhook management endpoints
+	authRouter.HandleFunc("/webhook/setup", p.handleWebhookSetup).Methods(http.MethodPost)
+	authRouter.HandleFunc("/webhook/setup", p.handleWebhookTeardown).Methods(http.MethodDelete)
+	authRouter.HandleFunc("/webhook/status", p.handleWebhookStatus).Methods(http.MethodGet)
+
+	// Notification preferences endpoints
+	authRouter.HandleFunc("/notification-prefs", p.handleGetNotificationPrefs).Methods(http.MethodGet)
+	authRouter.HandleFunc("/notification-prefs", p.handleSetNotificationPrefs).Methods(http.MethodPut)
+
+	return router
 }
 
 func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("Mattermost-User-ID")
 		if userID == "" {
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
+			p.handleError(w, r, &APIError{
+				ID:         "not_authorized",
+				Message:    "Not authorized. Please log in to Mattermost.",
+				StatusCode: http.StatusUnauthorized,
+			})
 			return
 		}
 

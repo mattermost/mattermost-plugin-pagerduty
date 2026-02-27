@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -18,16 +19,112 @@ import (
 
 // mockKVStore implements kvstore.KVStore for testing
 type mockKVStore struct {
-	getUserTokenFunc    func(userID string) (*kvstore.OAuthToken, error)
-	setUserTokenFunc    func(userID string, token *kvstore.OAuthToken) error
-	deleteUserTokenFunc func(userID string) error
-	getOAuthStateFunc   func(state string) (*kvstore.OAuthState, error)
-	setOAuthStateFunc   func(state string, oauthState *kvstore.OAuthState) error
-	deleteOAuthStateFunc func(state string) error
+	getUserTokenFunc              func(userID string) (*kvstore.OAuthToken, error)
+	setUserTokenFunc              func(userID string, token *kvstore.OAuthToken) error
+	deleteUserTokenFunc           func(userID string) error
+	getOAuthStateFunc             func(state string) (*kvstore.OAuthState, error)
+	setOAuthStateFunc             func(state string, oauthState *kvstore.OAuthState) error
+	deleteOAuthStateFunc          func(state string) error
+	getChannelSubscriptionFunc    func(channelID string) (*kvstore.ChannelSubscription, error)
+	setChannelSubscriptionFunc    func(sub *kvstore.ChannelSubscription) error
+	deleteChannelSubscriptionFunc func(channelID string) error
+	getSubscriptionIndexFunc      func() ([]string, error)
+	setSubscriptionIndexFunc      func(channelIDs []string) error
+	getUserNotificationPrefsFunc  func(userID string) (*kvstore.UserNotificationPrefs, error)
+	setUserNotificationPrefsFunc  func(userID string, prefs *kvstore.UserNotificationPrefs) error
+	getWebhookRegistrationFunc    func() (*kvstore.WebhookRegistration, error)
+	setWebhookRegistrationFunc    func(reg *kvstore.WebhookRegistration) error
+	deleteWebhookRegistrationFunc func() error
+	getOnCallSnapshotFunc         func() (*kvstore.OnCallSnapshot, error)
+	setOnCallSnapshotFunc         func(snapshot *kvstore.OnCallSnapshot) error
 }
 
 func (m *mockKVStore) GetCachedSchedules() ([]byte, error) { return nil, nil }
-func (m *mockKVStore) SetCachedSchedules(_ []byte) error    { return nil }
+func (m *mockKVStore) SetCachedSchedules(_ []byte) error   { return nil }
+
+// Channel subscription methods
+func (m *mockKVStore) GetChannelSubscription(channelID string) (*kvstore.ChannelSubscription, error) {
+	if m.getChannelSubscriptionFunc != nil {
+		return m.getChannelSubscriptionFunc(channelID)
+	}
+	return nil, nil
+}
+func (m *mockKVStore) SetChannelSubscription(sub *kvstore.ChannelSubscription) error {
+	if m.setChannelSubscriptionFunc != nil {
+		return m.setChannelSubscriptionFunc(sub)
+	}
+	return nil
+}
+func (m *mockKVStore) DeleteChannelSubscription(channelID string) error {
+	if m.deleteChannelSubscriptionFunc != nil {
+		return m.deleteChannelSubscriptionFunc(channelID)
+	}
+	return nil
+}
+func (m *mockKVStore) GetSubscriptionIndex() ([]string, error) {
+	if m.getSubscriptionIndexFunc != nil {
+		return m.getSubscriptionIndexFunc()
+	}
+	return nil, nil
+}
+func (m *mockKVStore) SetSubscriptionIndex(channelIDs []string) error {
+	if m.setSubscriptionIndexFunc != nil {
+		return m.setSubscriptionIndexFunc(channelIDs)
+	}
+	return nil
+}
+
+// User notification preferences
+func (m *mockKVStore) GetUserNotificationPrefs(userID string) (*kvstore.UserNotificationPrefs, error) {
+	if m.getUserNotificationPrefsFunc != nil {
+		return m.getUserNotificationPrefsFunc(userID)
+	}
+	return nil, nil
+}
+func (m *mockKVStore) SetUserNotificationPrefs(userID string, prefs *kvstore.UserNotificationPrefs) error {
+	if m.setUserNotificationPrefsFunc != nil {
+		return m.setUserNotificationPrefsFunc(userID, prefs)
+	}
+	return nil
+}
+
+// Webhook registration
+func (m *mockKVStore) GetWebhookRegistration() (*kvstore.WebhookRegistration, error) {
+	if m.getWebhookRegistrationFunc != nil {
+		return m.getWebhookRegistrationFunc()
+	}
+	return nil, nil
+}
+func (m *mockKVStore) SetWebhookRegistration(reg *kvstore.WebhookRegistration) error {
+	if m.setWebhookRegistrationFunc != nil {
+		return m.setWebhookRegistrationFunc(reg)
+	}
+	return nil
+}
+func (m *mockKVStore) DeleteWebhookRegistration() error {
+	if m.deleteWebhookRegistrationFunc != nil {
+		return m.deleteWebhookRegistrationFunc()
+	}
+	return nil
+}
+
+// On-call state cache
+func (m *mockKVStore) GetOnCallSnapshot() (*kvstore.OnCallSnapshot, error) {
+	if m.getOnCallSnapshotFunc != nil {
+		return m.getOnCallSnapshotFunc()
+	}
+	return nil, nil
+}
+func (m *mockKVStore) SetOnCallSnapshot(snapshot *kvstore.OnCallSnapshot) error {
+	if m.setOnCallSnapshotFunc != nil {
+		return m.setOnCallSnapshotFunc(snapshot)
+	}
+	return nil
+}
+
+// Reminder tracking
+func (m *mockKVStore) GetReminderRecord() (*kvstore.ReminderRecord, error) { return nil, nil }
+func (m *mockKVStore) SetReminderRecord(_ *kvstore.ReminderRecord) error   { return nil }
 
 func (m *mockKVStore) GetUserToken(userID string) (*kvstore.OAuthToken, error) {
 	if m.getUserTokenFunc != nil {
@@ -71,21 +168,43 @@ func (m *mockKVStore) DeleteOAuthState(state string) error {
 	return nil
 }
 
+func setupMockAPIForActivation(api *plugintest.API, siteURL string) { //nolint:unparam
+	// Create the assets directory and a minimal profile image for EnsureBot
+	_ = os.MkdirAll("/tmp/plugin/assets", 0o755)
+	_ = os.WriteFile("/tmp/plugin/assets/profile.png", []byte{0x89, 0x50, 0x4E, 0x47}, 0o644)
+
+	api.On("GetConfig").Return(&model.Config{
+		ServiceSettings: model.ServiceSettings{
+			SiteURL: &siteURL,
+		},
+	})
+	api.On("LogInfo", mock.Anything).Return().Maybe()
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	api.On("LogError", mock.Anything).Return().Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
+	// Bot setup mocks
+	api.On("GetServerVersion").Return("7.0.0")
+	api.On("GetBundlePath").Return("/tmp/plugin", nil).Maybe()
+	api.On("KVGet", mock.Anything).Return(nil, nil).Maybe()
+	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+	api.On("EnsureBotUser", mock.Anything).Return("bot-user-id", nil).Maybe()
+	api.On("PatchBot", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	api.On("SetProfileImage", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Slash command registration mock
+	api.On("UnregisterCommand", mock.Anything, mock.Anything).Return(nil).Maybe()
+	api.On("RegisterCommand", mock.Anything).Return(nil).Maybe()
+}
+
 func TestPlugin_OnActivate(t *testing.T) {
 	t.Run("successful activation", func(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		siteURL := "http://localhost:8065"
-		api.On("GetConfig").Return(&model.Config{
-			ServiceSettings: model.ServiceSettings{
-				SiteURL: &siteURL,
-			},
-		})
-		api.On("LogInfo", mock.Anything).Return().Maybe()
-		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-		api.On("LogError", mock.Anything).Return().Maybe()
+		setupMockAPIForActivation(api, "http://localhost:8065")
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
@@ -97,6 +216,12 @@ func TestPlugin_OnActivate(t *testing.T) {
 		assert.NotNil(t, plugin.kvstore)
 		assert.NotNil(t, plugin.createPagerDutyClient)
 		assert.Equal(t, "http://localhost:8065", plugin.siteURL)
+		assert.NotEmpty(t, plugin.botID)
+
+		// Clean up monitor
+		if plugin.onCallMonitor != nil {
+			plugin.onCallMonitor.Stop()
+		}
 	})
 
 	t.Run("missing site URL", func(t *testing.T) {
@@ -108,8 +233,10 @@ func TestPlugin_OnActivate(t *testing.T) {
 				SiteURL: nil,
 			},
 		})
-		api.On("LogInfo", mock.Anything).Return()
-		api.On("LogError", mock.Anything).Return()
+		api.On("LogInfo", mock.Anything).Return().Maybe()
+		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On("LogError", mock.Anything).Return().Maybe()
+		api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
@@ -124,7 +251,7 @@ func TestPlugin_OnDeactivate(t *testing.T) {
 	api := &plugintest.API{}
 	defer api.AssertExpectations(t)
 
-	api.On("LogInfo", mock.Anything).Return()
+	api.On("LogDebug", mock.Anything).Return()
 
 	plugin := &Plugin{}
 	plugin.SetAPI(api)
@@ -183,14 +310,18 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 
-			plugin := &Plugin{}
-			plugin.SetAPI(api)
-			plugin.client = pluginapi.NewClient(api, nil)
-			plugin.createPagerDutyClient = pagerduty.NewOAuthClient
+			p := &Plugin{}
+			p.SetAPI(api)
+			p.client = pluginapi.NewClient(api, nil)
+			p.createPagerDutyClient = pagerduty.NewOAuthClient
+			p.kvstore = &mockKVStore{}
+			p.configuration = &configuration{}
 
 			if tt.setupPlugin != nil {
-				tt.setupPlugin(plugin)
+				tt.setupPlugin(p)
 			}
+
+			p.router = p.initRouter()
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, tt.path, nil)
@@ -198,7 +329,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 				r.Header.Set("Mattermost-User-ID", tt.userID)
 			}
 
-			plugin.ServeHTTP(nil, w, r)
+			p.ServeHTTP(nil, w, r)
 
 			result := w.Result()
 			assert.NotNil(t, result)
@@ -294,6 +425,12 @@ func TestPlugin_Configuration(t *testing.T) {
 			config.OAuthClientSecret = "loaded-client-secret"
 			config.APIBaseURL = "https://api.pagerduty.com"
 		}).Return(nil)
+		api.On("UnregisterCommand", mock.Anything, mock.Anything).Return(nil).Maybe()
+		api.On("RegisterCommand", mock.Anything).Return(nil)
+		api.On("LogInfo", mock.Anything).Return().Maybe()
+		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On("LogDebug", mock.Anything).Return().Maybe()
+		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
@@ -314,16 +451,7 @@ func TestPlugin_Integration(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		siteURL := "http://localhost:8065"
-		api.On("GetConfig").Return(&model.Config{
-			ServiceSettings: model.ServiceSettings{
-				SiteURL: &siteURL,
-			},
-		})
-		api.On("LogInfo", mock.Anything).Return().Maybe()
-		api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-		api.On("LogError", mock.Anything).Return().Maybe()
+		setupMockAPIForActivation(api, "http://localhost:8065")
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)

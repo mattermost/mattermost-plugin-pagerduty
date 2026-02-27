@@ -21,7 +21,7 @@ const (
 	pagerDutyAuthURL  = "https://identity.pagerduty.com/oauth/authorize"
 	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token"
 
-	oauthScopes     = "schedules.read oncalls.read services.read incidents.read incidents.write users.read"
+	oauthScopes     = "schedules.read oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write"
 	oauthStateExpiry = 10 * time.Minute
 )
 
@@ -202,7 +202,7 @@ func (p *Plugin) handleOAuthDisconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.client.Log.Info("User disconnected PagerDuty account", "user_id", userID)
+	p.client.Log.Debug("User disconnected PagerDuty account", "user_id", userID)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
 		p.client.Log.Error("Failed to encode disconnect response", "error", err.Error())

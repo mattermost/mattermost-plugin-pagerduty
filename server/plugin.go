@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 
+	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/pkg/errors"
@@ -43,12 +45,20 @@ type Plugin struct {
 	// createPagerDutyClient is a function to create PagerDuty clients.
 	// This can be overridden in tests to inject mock clients.
 	createPagerDutyClient func(accessToken, baseURL string) *pagerduty.Client
+
+	// botID is the Mattermost user ID for the PagerDuty bot.
+	botID string
+
+	// router is the HTTP router for all plugin endpoints, initialized once in OnActivate.
+	router *mux.Router
+
+	// onCallMonitor runs background on-call change detection.
+	onCallMonitor *OnCallMonitor
 }
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
 func (p *Plugin) OnActivate() error {
 	p.client = pluginapi.NewClient(p.MattermostPlugin.API, p.MattermostPlugin.Driver)
-	p.client.Log.Info("PagerDuty plugin activating")
 
 	// Initialize the PagerDuty client factory with the default OAuth implementation
 	p.createPagerDutyClient = pagerduty.NewOAuthClient
@@ -57,28 +67,46 @@ func (p *Plugin) OnActivate() error {
 
 	config := p.MattermostPlugin.API.GetConfig()
 	if config.ServiceSettings.SiteURL == nil {
-		p.client.Log.Error("Site URL is not configured")
 		return errors.New("site URL is not configured")
 	}
 	p.siteURL = *config.ServiceSettings.SiteURL
-	p.client.Log.Debug("Site URL configured", "url", p.siteURL)
+
+	// Initialize HTTP router early so API endpoints are available even if
+	// optional features (bot, slash command) fail to initialize.
+	p.router = p.initRouter()
 
 	// Log plugin configuration status
 	pluginConfig := p.getConfiguration()
 	if err := pluginConfig.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration is not valid", "error", err)
-	} else {
-		p.client.Log.Info("Plugin configuration is valid", "base_url", pluginConfig.APIBaseURL)
+		p.client.Log.Warn("Plugin configuration is not valid — OAuth will not work until configured", "error", err)
 	}
 
-	p.client.Log.Info("PagerDuty plugin activated successfully")
+	// Ensure bot account exists
+	if err := p.ensureBot(); err != nil {
+		return errors.Wrap(err, "failed to ensure PagerDuty bot")
+	}
+
+	// Register slash command
+	if err := p.registerCommand(); err != nil {
+		return errors.Wrap(err, "failed to register slash command")
+	}
+
+	// Start the on-call monitor background job
+	p.onCallMonitor = NewOnCallMonitor(p)
+	p.onCallMonitor.Start()
+
+	p.client.Log.Info("PagerDuty plugin activated")
 	return nil
 }
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
+	if p.onCallMonitor != nil {
+		p.onCallMonitor.Stop()
+	}
+
 	if p.client != nil {
-		p.client.Log.Info("PagerDuty plugin deactivating")
+		p.client.Log.Debug("PagerDuty plugin deactivating")
 	}
 	return nil
 }
@@ -104,6 +132,15 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 
 	config := p.getConfiguration()
 	return p.createPagerDutyClient(token.AccessToken, config.APIBaseURL), nil
+}
+
+// ServeHTTP handles HTTP requests to the plugin.
+func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Request) {
+	if p.router == nil {
+		http.Error(w, "Plugin not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	p.router.ServeHTTP(w, r)
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

@@ -21,6 +21,7 @@ type configuration struct {
 	OAuthClientID     string `json:"OAuthClientID"`
 	OAuthClientSecret string `json:"OAuthClientSecret"`
 	APIBaseURL        string `json:"APIBaseURL"`
+	WebhookSecret     string `json:"WebhookSecret"`
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -73,6 +74,13 @@ func (p *Plugin) setConfiguration(configuration *configuration) {
 
 // OnConfigurationChange is invoked when configuration changes may have been made.
 func (p *Plugin) OnConfigurationChange() error {
+	// Log using the raw API since p.client may not be initialized yet
+	if p.client != nil {
+		p.client.Log.Info("OnConfigurationChange: invoked (client is initialized)")
+	} else {
+		p.MattermostPlugin.API.LogInfo("OnConfigurationChange: invoked (client is nil, pre-OnActivate)")
+	}
+
 	var configuration = new(configuration)
 
 	// Load the public configuration fields from the Mattermost server configuration.
@@ -81,6 +89,22 @@ func (p *Plugin) OnConfigurationChange() error {
 	}
 
 	p.setConfiguration(configuration)
+
+	// Re-register the slash command on every config change. The Mattermost server
+	// may clear the plugin command registry during config-triggered state syncs
+	// (e.g. when EnablePlugin is called after UploadPluginForced during deploy).
+	// OnConfigurationChange is called before OnActivate on initial startup, so
+	// guard against the client not yet being initialized.
+	if p.client != nil {
+		p.client.Log.Info("OnConfigurationChange: re-registering slash command")
+		if err := p.registerCommand(); err != nil {
+			p.client.Log.Warn("OnConfigurationChange: failed to re-register slash command", "error", err)
+		} else {
+			p.client.Log.Info("OnConfigurationChange: slash command re-registered successfully")
+		}
+	} else {
+		p.MattermostPlugin.API.LogInfo("OnConfigurationChange: skipping command registration (client is nil)")
+	}
 
 	return nil
 }

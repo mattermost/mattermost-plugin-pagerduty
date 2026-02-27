@@ -207,3 +207,60 @@ export interface Override {
 export interface OverrideResponse {
     override: Override;
 }
+
+// --- Channel Subscriptions ---
+
+export interface ChannelSubscription {
+    channel_id: string;
+    creator_id: string;
+    event_types: string[];
+    service_ids: string[];
+    created_at: string;
+}
+
+export interface SubscriptionResponse {
+    subscription: ChannelSubscription | null;
+}
+
+export interface SubscriptionsResponse {
+    subscriptions: ChannelSubscription[];
+}
+
+// --- User Notification Preferences ---
+
+export interface UserNotificationPrefs {
+    enabled: boolean;
+    oncall_start: boolean;
+    oncall_end: boolean;
+    shift_reminder: boolean;
+    shift_taken: boolean;
+}
+
+// --- Webhook Status ---
+
+export interface WebhookStatus {
+    active: boolean;
+    subscription_id?: string;
+    created_by?: string;
+    created_at?: string;
+}
+
+// --- Event Types ---
+
+export const EVENT_TYPES = {
+    INCIDENT_TRIGGERED: 'incident.triggered',
+    INCIDENT_ACKNOWLEDGED: 'incident.acknowledged',
+    INCIDENT_RESOLVED: 'incident.resolved',
+    INCIDENT_ESCALATED: 'incident.escalated',
+    ONCALL_CHANGE: 'oncall.change',
+} as const;
+
+export const EVENT_TYPE_LABELS: Record<string, string> = {
+    'incident.triggered': 'Incident Triggered',
+    'incident.acknowledged': 'Incident Acknowledged',
+    'incident.resolved': 'Incident Resolved',
+    'incident.escalated': 'Incident Escalated',
+    'oncall.change': 'On-Call Change',
+};
+
+export const ALL_EVENT_TYPES = Object.values(EVENT_TYPES);
