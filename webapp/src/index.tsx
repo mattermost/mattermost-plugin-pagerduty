@@ -6,6 +6,8 @@ import type {Store, Action} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
 
+import CreateIncidentPostModal from './components/create_incident_post_modal';
+import type {PostIncidentEventDetail} from './components/create_incident_post_modal';
 import PagerDutySidebar from './components/sidebar/sidebar';
 
 import manifest from '@/manifest';
@@ -46,6 +48,28 @@ export default class Plugin {
             <Icon/>,
             () => store.dispatch(toggleRHSPlugin),
             'View PagerDuty on-call schedules',
+        );
+
+        // Register root component for incident creation modal (rendered at app root)
+        registry.registerRootComponent(CreateIncidentPostModal);
+
+        // Register post dropdown menu action to create PagerDuty incident from a post
+        registry.registerPostDropdownMenuAction(
+            'Create PagerDuty Incident',
+            (postId: string) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const state = store.getState() as any;
+                const post = state.entities?.posts?.posts?.[postId];
+                if (post && post.message) {
+                    const detail: PostIncidentEventDetail = {
+                        postId: post.id,
+                        postMessage: post.message,
+                    };
+                    window.dispatchEvent(
+                        new CustomEvent('pagerduty-create-incident-from-post', {detail}),
+                    );
+                }
+            },
         );
     }
 }
