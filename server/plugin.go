@@ -59,7 +59,7 @@ type Plugin struct {
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
 func (p *Plugin) OnActivate() error {
 	p.client = pluginapi.NewClient(p.MattermostPlugin.API, p.MattermostPlugin.Driver)
-	p.client.Log.Info("PagerDuty plugin activating")
+	p.client.Log.Info("OnActivate: PagerDuty plugin activating")
 
 	// Initialize the PagerDuty client factory with the default OAuth implementation
 	p.createPagerDutyClient = pagerduty.NewOAuthClient
@@ -68,41 +68,44 @@ func (p *Plugin) OnActivate() error {
 
 	config := p.MattermostPlugin.API.GetConfig()
 	if config.ServiceSettings.SiteURL == nil {
-		p.client.Log.Error("Site URL is not configured")
+		p.client.Log.Error("OnActivate: Site URL is not configured")
 		return errors.New("site URL is not configured")
 	}
 	p.siteURL = *config.ServiceSettings.SiteURL
-	p.client.Log.Debug("Site URL configured", "url", p.siteURL)
+	p.client.Log.Debug("OnActivate: Site URL configured", "url", p.siteURL)
 
 	// Initialize HTTP router early so API endpoints are available even if
 	// optional features (bot, slash command) fail to initialize.
 	p.router = p.initRouter()
+	p.client.Log.Info("OnActivate: HTTP router initialized")
 
 	// Log plugin configuration status
 	pluginConfig := p.getConfiguration()
 	if err := pluginConfig.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration is not valid", "error", err)
+		p.client.Log.Warn("OnActivate: Plugin configuration is not valid", "error", err)
 	} else {
-		p.client.Log.Info("Plugin configuration is valid", "base_url", pluginConfig.APIBaseURL)
+		p.client.Log.Info("OnActivate: Plugin configuration is valid", "base_url", pluginConfig.APIBaseURL)
 	}
 
 	// Ensure bot account exists
 	if err := p.ensureBot(); err != nil {
-		p.client.Log.Error("Failed to ensure bot", "error", err)
+		p.client.Log.Error("OnActivate: Failed to ensure bot", "error", err)
 		return errors.Wrap(err, "failed to ensure PagerDuty bot")
 	}
 
 	// Register slash command
+	p.client.Log.Info("OnActivate: about to register slash command")
 	if err := p.registerCommand(); err != nil {
-		p.client.Log.Error("Failed to register slash command", "error", err)
+		p.client.Log.Error("OnActivate: Failed to register slash command", "error", err)
 		return errors.Wrap(err, "failed to register slash command")
 	}
+	p.client.Log.Info("OnActivate: slash command registered successfully")
 
 	// Start the on-call monitor background job
 	p.onCallMonitor = NewOnCallMonitor(p)
 	p.onCallMonitor.Start()
 
-	p.client.Log.Info("PagerDuty plugin activated successfully")
+	p.client.Log.Info("OnActivate: PagerDuty plugin activated successfully")
 	return nil
 }
 
@@ -113,7 +116,7 @@ func (p *Plugin) OnDeactivate() error {
 	}
 
 	if p.client != nil {
-		p.client.Log.Info("PagerDuty plugin deactivating")
+		p.client.Log.Info("OnDeactivate: PagerDuty plugin deactivating")
 	}
 	return nil
 }

@@ -16,18 +16,34 @@ const commandTrigger = "pagerduty"
 
 // registerCommand registers the /pagerduty slash command.
 func (p *Plugin) registerCommand() error {
-	return p.client.SlashCommand.Register(&model.Command{
+	p.client.Log.Info("registerCommand: attempting to register /pagerduty slash command")
+
+	cmd := &model.Command{
 		Trigger:          commandTrigger,
 		DisplayName:      "PagerDuty",
 		Description:      "Manage PagerDuty notifications and channel subscriptions",
 		AutoComplete:     true,
 		AutoCompleteHint: "[subscribe|unsubscribe|list|notify|webhook]",
 		AutoCompleteDesc: "PagerDuty integration commands",
-	})
+	}
+
+	if err := p.client.SlashCommand.Register(cmd); err != nil {
+		p.client.Log.Error("registerCommand: RegisterCommand API call FAILED", "error", err, "trigger", commandTrigger)
+		return err
+	}
+
+	p.client.Log.Info("registerCommand: RegisterCommand API call SUCCEEDED", "trigger", commandTrigger)
+	return nil
 }
 
 // ExecuteCommand handles /pagerduty slash commands.
 func (p *Plugin) ExecuteCommand(_ *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, error) {
+	p.client.Log.Info("ExecuteCommand: slash command received",
+		"command", args.Command,
+		"user_id", args.UserId,
+		"channel_id", args.ChannelId,
+	)
+
 	parts := strings.Fields(args.Command)
 	if len(parts) < 2 {
 		return p.commandHelp(), nil

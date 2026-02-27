@@ -263,9 +263,13 @@ func TestRouteToSubscribedChannels(t *testing.T) {
 // newMockAPI creates a mock API with common log expectations
 func newMockAPI() *plugintest.API {
 	api := &plugintest.API{}
-	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	// Accept log calls with varying numbers of key-value pairs (1, 3, 5, 7 args).
+	for _, method := range []string{"LogDebug", "LogInfo", "LogWarn", "LogError"} {
+		api.On(method, mock.Anything).Return().Maybe()
+		api.On(method, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On(method, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On(method, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		api.On(method, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	}
 	return api
 }

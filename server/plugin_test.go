@@ -419,6 +419,8 @@ func TestPlugin_Configuration(t *testing.T) {
 			config.APIBaseURL = "https://api.pagerduty.com"
 		}).Return(nil)
 		api.On("RegisterCommand", mock.Anything).Return(nil)
+		api.On("LogInfo", mock.Anything).Return().Maybe()
+		api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
