@@ -707,6 +707,17 @@ func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) 
 }
 
 func (p *Plugin) handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
+	// Require a webhook to be registered before allowing subscriptions
+	reg, regErr := p.kvstore.GetWebhookRegistration()
+	if regErr != nil || reg == nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.no_webhook",
+			Message:    "No PagerDuty webhook is configured. An admin must run /pagerduty webhook setup first.",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
 	userID := r.Header.Get("Mattermost-User-ID")
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)

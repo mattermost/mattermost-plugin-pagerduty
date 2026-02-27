@@ -147,6 +147,12 @@ func (p *Plugin) executeDisconnect(args *model.CommandArgs) (*model.CommandRespo
 // --- Subscribe ---
 
 func (p *Plugin) executeSubscribe(args *model.CommandArgs, params []string) (*model.CommandResponse, error) {
+	// Check that a webhook is registered before allowing subscriptions
+	reg, err := p.kvstore.GetWebhookRegistration()
+	if err != nil || reg == nil {
+		return ephemeral("No PagerDuty webhook is configured yet. An admin must first run `/pagerduty webhook setup` before channels can subscribe to events."), nil
+	}
+
 	eventTypes := AllEventTypes
 	var serviceIDs []string
 

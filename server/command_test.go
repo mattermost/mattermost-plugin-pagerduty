@@ -52,9 +52,19 @@ func TestExecuteCommand(t *testing.T) {
 }
 
 func TestExecuteSubscribe(t *testing.T) {
+	// webhookKVStore returns a mock KV store with a webhook registration present
+	webhookKVStore := func() *mockKVStore {
+		return &mockKVStore{
+			getWebhookRegistrationFunc: func() (*kvstore.WebhookRegistration, error) {
+				return &kvstore.WebhookRegistration{SubscriptionID: "sub-test"}, nil
+			},
+		}
+	}
+
 	t.Run("subscribe with defaults", func(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
+		p.kvstore = webhookKVStore()
 
 		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe",
@@ -69,6 +79,7 @@ func TestExecuteSubscribe(t *testing.T) {
 	t.Run("subscribe with specific events", func(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
+		p.kvstore = webhookKVStore()
 
 		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe incident.triggered,incident.resolved",
@@ -84,6 +95,7 @@ func TestExecuteSubscribe(t *testing.T) {
 	t.Run("subscribe with service filter", func(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
+		p.kvstore = webhookKVStore()
 
 		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe --service PSERVICE1",
@@ -99,6 +111,7 @@ func TestExecuteSubscribe(t *testing.T) {
 	t.Run("subscribe with invalid event type", func(t *testing.T) {
 		api := newMockAPI()
 		p := newTestPlugin(api)
+		p.kvstore = webhookKVStore()
 
 		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
 			Command:   "/pagerduty subscribe invalid.event",
@@ -108,6 +121,20 @@ func TestExecuteSubscribe(t *testing.T) {
 
 		assert.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "Unknown event type")
+	})
+
+	t.Run("subscribe without webhook configured", func(t *testing.T) {
+		api := newMockAPI()
+		p := newTestPlugin(api)
+
+		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{
+			Command:   "/pagerduty subscribe",
+			UserId:    "user-1",
+			ChannelId: "channel-1",
+		})
+
+		assert.Nil(t, appErr)
+		assert.Contains(t, resp.Text, "No PagerDuty webhook is configured")
 	})
 }
 

@@ -6,6 +6,15 @@ import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotific
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+export class ClientError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = 'ClientError';
+        this.status = status;
+    }
+}
+
 export class Client {
     private baseUrl: string;
 
@@ -38,7 +47,7 @@ export class Client {
                 } catch {
                     message = response.statusText || `Request failed (${response.status})`;
                 }
-                throw new Error(message);
+                throw new ClientError(message, response.status);
             }
 
             return response;

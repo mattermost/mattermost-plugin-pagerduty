@@ -13,6 +13,7 @@ import ScheduleList from './schedule_list';
 import SubscriptionManager from './subscription_manager';
 
 import client from '@/client/client';
+import {ClientError} from '@/client/client';
 import type {Incident, IncidentFilters, OnCall, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
@@ -142,19 +143,22 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
     }, [checkConnection]);
 
-    // Handle disconnect
+    // Handle disconnect — optimistic: clear local state first, then call API
     const handleDisconnect = useCallback(async () => {
+        setConnected(false);
+        setCurrentUser(null);
+        setOnCalls([]);
+        setSchedules([]);
+        setIncidents([]);
+        setIncidentFilters({});
+        setLastRefreshed(null);
         try {
             await client.disconnect();
-            setConnected(false);
-            setCurrentUser(null);
-            setOnCalls([]);
-            setSchedules([]);
-            setIncidents([]);
-            setIncidentFilters({});
-            setLastRefreshed(null);
-        } catch {
-            // Disconnect failed silently
+        } catch (err) {
+            // API call failed but we already cleared local state so the user
+            // can re-authenticate. Show the error for debugging.
+            // eslint-disable-next-line no-console
+            console.warn('PagerDuty disconnect API call failed:', err);
         }
     }, []);
 
@@ -373,13 +377,31 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     };
 
     const handleAcknowledge = async (incidentId: string) => {
-        await client.updateIncident(incidentId, 'acknowledged');
-        await fetchIncidents(true, effectiveIncidentFilters);
+        try {
+            await client.updateIncident(incidentId, 'acknowledged');
+            await fetchIncidents(true, effectiveIncidentFilters);
+        } catch (err) {
+            if (err instanceof ClientError && err.status === 401) {
+                setConnected(false);
+                setError('Your PagerDuty session has expired. Please reconnect.');
+            } else {
+                setError(err instanceof Error ? err.message : 'Failed to acknowledge incident');
+            }
+        }
     };
 
     const handleResolve = async (incidentId: string) => {
-        await client.updateIncident(incidentId, 'resolved');
-        await fetchIncidents(true, effectiveIncidentFilters);
+        try {
+            await client.updateIncident(incidentId, 'resolved');
+            await fetchIncidents(true, effectiveIncidentFilters);
+        } catch (err) {
+            if (err instanceof ClientError && err.status === 401) {
+                setConnected(false);
+                setError('Your PagerDuty session has expired. Please reconnect.');
+            } else {
+                setError(err instanceof Error ? err.message : 'Failed to resolve incident');
+            }
+        }
     };
 
     const handleIncidentFiltersChange = useCallback((newFilters: IncidentFilters) => {
