@@ -1,24 +1,49 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useMemo} from 'react';
 
 import client from '@/client/client';
-import type {Service, ServicesResponse, CreateIncidentResponse} from '@/types/pagerduty';
+import type {Service, ServicesResponse, CreateIncidentResponse, OnCall, OnCallsResponse, User, UsersResponse} from '@/types/pagerduty';
 
 export interface PostIncidentEventDetail {
     postId: string;
     postMessage: string;
 }
 
+const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 12px',
+    borderRadius: '4px',
+    border: '1px solid rgba(61, 60, 64, 0.16)',
+    fontSize: '14px',
+    backgroundColor: 'var(--center-channel-bg, #fff)',
+    color: 'var(--center-channel-color, #3d3c40)',
+    boxSizing: 'border-box',
+};
+
+const labelStyle: React.CSSProperties = {
+    display: 'block',
+    marginBottom: '4px',
+    fontWeight: 600,
+    fontSize: '14px',
+};
+
 const CreateIncidentPostModal: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState('');
+    const [urgency, setUrgency] = useState('high');
     const [services, setServices] = useState<Service[]>([]);
+    const [onCalls, setOnCalls] = useState<OnCall[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [userQuery, setUserQuery] = useState('');
+    const [selectedAssignees, setSelectedAssignees] = useState<User[]>([]);
+    const [showUserDropdown, setShowUserDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadingServices, setLoadingServices] = useState(false);
+    const [loadingUsers, setLoadingUsers] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
@@ -27,11 +52,18 @@ const CreateIncidentPostModal: React.FC = () => {
         setTitle('');
         setDescription('');
         setSelectedServiceId('');
+        setUrgency('high');
         setServices([]);
+        setOnCalls([]);
+        setUsers([]);
+        setUserQuery('');
+        setSelectedAssignees([]);
+        setShowUserDropdown(false);
         setError(null);
         setSuccess(null);
         setLoading(false);
         setLoadingServices(false);
+        setLoadingUsers(false);
     }, []);
 
     // Listen for the custom event to open the modal
@@ -56,19 +88,23 @@ const CreateIncidentPostModal: React.FC = () => {
         return () => window.removeEventListener('pagerduty-create-incident-from-post', handler as EventListener);
     }, []);
 
-    // Load services when modal opens
+    // Load services and on-calls when modal opens
     useEffect(() => {
         if (!isOpen) {
             return;
         }
 
-        const fetchServices = async () => {
+        const fetchData = async () => {
             try {
                 setLoadingServices(true);
-                const response: ServicesResponse = await client.getServices();
-                setServices(response.services || []);
-                if (response.services?.length > 0) {
-                    setSelectedServiceId(response.services[0].id);
+                const [servicesResp, onCallsResp]: [ServicesResponse, OnCallsResponse] = await Promise.all([
+                    client.getServices(),
+                    client.getOnCalls(),
+                ]);
+                setServices(servicesResp.services || []);
+                setOnCalls(onCallsResp.oncalls || []);
+                if (servicesResp.services?.length > 0) {
+                    setSelectedServiceId(servicesResp.services[0].id);
                 }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load services');
@@ -77,8 +113,30 @@ const CreateIncidentPostModal: React.FC = () => {
             }
         };
 
-        fetchServices();
+        fetchData();
     }, [isOpen]);
+
+    // Search users when query changes
+    useEffect(() => {
+        if (!userQuery.trim()) {
+            setUsers([]);
+            return undefined;
+        }
+
+        const debounceTimer = setTimeout(async () => {
+            try {
+                setLoadingUsers(true);
+                const response: UsersResponse = await client.getUsers(userQuery);
+                setUsers(response.users || []);
+            } catch {
+                // Silently fail user search
+            } finally {
+                setLoadingUsers(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(debounceTimer);
+    }, [userQuery]);
 
     // Close on Escape key
     useEffect(() => {
@@ -96,6 +154,34 @@ const CreateIncidentPostModal: React.FC = () => {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, handleClose]);
 
+    // Get on-call users for the selected service
+    const serviceOnCalls = useMemo(() => {
+        if (!selectedServiceId || !onCalls.length || !services.length) {
+            return [];
+        }
+
+        const selectedService = services.find((s) => s.id === selectedServiceId);
+        if (!selectedService?.escalation_policy?.id) {
+            return [];
+        }
+
+        const epId = selectedService.escalation_policy.id;
+        return onCalls.filter((oc) => oc.escalation_policy?.id === epId);
+    }, [selectedServiceId, onCalls, services]);
+
+    const handleAddAssignee = useCallback((user: User) => {
+        if (!selectedAssignees.some((a) => a.id === user.id)) {
+            setSelectedAssignees((prev) => [...prev, user]);
+        }
+        setUserQuery('');
+        setUsers([]);
+        setShowUserDropdown(false);
+    }, [selectedAssignees]);
+
+    const handleRemoveAssignee = useCallback((userId: string) => {
+        setSelectedAssignees((prev) => prev.filter((a) => a.id !== userId));
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -108,10 +194,16 @@ const CreateIncidentPostModal: React.FC = () => {
         setError(null);
 
         try {
+            const assigneeIds = selectedAssignees.length > 0 ?
+                selectedAssignees.map((a) => a.id) :
+                undefined;
+
             const incident: CreateIncidentResponse = await client.createIncident(
                 title.trim(),
                 description.trim(),
                 selectedServiceId,
+                urgency,
+                assigneeIds,
             );
             setSuccess(`Incident created: ${incident.incident.title}`);
             setTimeout(() => handleClose(), 2000);
@@ -213,56 +305,20 @@ const CreateIncidentPostModal: React.FC = () => {
                             </div>
                         )}
 
-                        <div style={{marginBottom: '16px'}}>
-                            <label
-                                htmlFor='pd-post-incident-title-input'
-                                style={{display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '14px'}}
-                            >
-                                {'Title *'}
-                            </label>
-                            <input
-                                id='pd-post-incident-title-input'
-                                type='text'
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder='Brief description of the issue'
-                                required={true}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    borderRadius: '4px',
-                                    border: '1px solid rgba(61, 60, 64, 0.16)',
-                                    fontSize: '14px',
-                                    backgroundColor: 'var(--center-channel-bg, #fff)',
-                                    color: 'var(--center-channel-color, #3d3c40)',
-                                    boxSizing: 'border-box',
-                                }}
-                            />
-                        </div>
-
+                        {/* Service */}
                         <div style={{marginBottom: '16px'}}>
                             <label
                                 htmlFor='pd-post-incident-service-select'
-                                style={{display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '14px'}}
+                                style={labelStyle}
                             >
-                                {'Service *'}
+                                {'Impacted Service *'}
                             </label>
                             <select
                                 id='pd-post-incident-service-select'
                                 value={selectedServiceId}
                                 onChange={(e) => setSelectedServiceId(e.target.value)}
                                 required={true}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    borderRadius: '4px',
-                                    border: '1px solid rgba(61, 60, 64, 0.16)',
-                                    fontSize: '14px',
-                                    backgroundColor: 'var(--center-channel-bg, #fff)',
-                                    color: 'var(--center-channel-color, #3d3c40)',
-                                    cursor: 'pointer',
-                                    boxSizing: 'border-box',
-                                }}
+                                style={{...inputStyle, cursor: 'pointer'}}
                             >
                                 {services.map((service) => (
                                     <option
@@ -273,12 +329,197 @@ const CreateIncidentPostModal: React.FC = () => {
                                     </option>
                                 ))}
                             </select>
+
+                            {/* On-call display for selected service */}
+                            {serviceOnCalls.length > 0 && (
+                                <div
+                                    className='pagerduty-oncall-info'
+                                    style={{
+                                        marginTop: '6px',
+                                        padding: '8px 10px',
+                                        backgroundColor: 'rgba(61, 60, 64, 0.04)',
+                                        borderRadius: '4px',
+                                        fontSize: '13px',
+                                    }}
+                                >
+                                    <span style={{fontWeight: 600}}>{'Currently on call: '}</span>
+                                    {serviceOnCalls.map((oc, idx) => (
+                                        <span key={oc.user.id}>
+                                            {idx > 0 && ', '}
+                                            {oc.user.name || oc.user.summary}
+                                            {oc.escalation_level > 1 && ` (L${oc.escalation_level})`}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
+                        {/* Title */}
+                        <div style={{marginBottom: '16px'}}>
+                            <label
+                                htmlFor='pd-post-incident-title-input'
+                                style={labelStyle}
+                            >
+                                {'Title *'}
+                            </label>
+                            <input
+                                id='pd-post-incident-title-input'
+                                type='text'
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder='Brief description of the issue'
+                                required={true}
+                                style={inputStyle}
+                            />
+                        </div>
+
+                        {/* Urgency */}
+                        <div style={{marginBottom: '16px'}}>
+                            <label
+                                htmlFor='pd-post-incident-urgency-select'
+                                style={labelStyle}
+                            >
+                                {'Urgency'}
+                            </label>
+                            <select
+                                id='pd-post-incident-urgency-select'
+                                value={urgency}
+                                onChange={(e) => setUrgency(e.target.value)}
+                                style={{...inputStyle, cursor: 'pointer'}}
+                            >
+                                <option value='high'>{'High'}</option>
+                                <option value='low'>{'Low'}</option>
+                            </select>
+                        </div>
+
+                        {/* Assignee */}
+                        <div style={{marginBottom: '16px', position: 'relative'}}>
+                            <label
+                                htmlFor='pd-post-incident-assignee-input'
+                                style={labelStyle}
+                            >
+                                {'Assign To'}
+                            </label>
+
+                            {/* Selected assignees */}
+                            {selectedAssignees.length > 0 && (
+                                <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px'}}>
+                                    {selectedAssignees.map((user) => (
+                                        <span
+                                            key={user.id}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                backgroundColor: 'rgba(61, 60, 64, 0.08)',
+                                                fontSize: '13px',
+                                            }}
+                                        >
+                                            {user.name}
+                                            <button
+                                                type='button'
+                                                onClick={() => handleRemoveAssignee(user.id)}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    padding: '0 2px',
+                                                    fontSize: '14px',
+                                                    lineHeight: 1,
+                                                    color: 'inherit',
+                                                    opacity: 0.6,
+                                                }}
+                                                aria-label={`Remove ${user.name}`}
+                                            >
+                                                {'\u00d7'}
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            <input
+                                id='pd-post-incident-assignee-input'
+                                type='text'
+                                value={userQuery}
+                                onChange={(e) => {
+                                    setUserQuery(e.target.value);
+                                    setShowUserDropdown(true);
+                                }}
+                                onFocus={() => setShowUserDropdown(true)}
+                                placeholder='Search PagerDuty users...'
+                                autoComplete='off'
+                                style={inputStyle}
+                            />
+
+                            {/* User search dropdown */}
+                            {showUserDropdown && userQuery.trim() && (
+                                <div
+                                    className='pagerduty-user-dropdown'
+                                    style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0,
+                                        right: 0,
+                                        maxHeight: '160px',
+                                        overflow: 'auto',
+                                        backgroundColor: 'var(--center-channel-bg, #fff)',
+                                        border: '1px solid rgba(61, 60, 64, 0.16)',
+                                        borderRadius: '4px',
+                                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                                        zIndex: 1,
+                                    }}
+                                >
+                                    {loadingUsers && (
+                                        <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
+                                            {'Searching...'}
+                                        </div>
+                                    )}
+                                    {!loadingUsers && users.length === 0 && (
+                                        <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
+                                            {'No users found'}
+                                        </div>
+                                    )}
+                                    {users.filter((u) => !selectedAssignees.some((a) => a.id === u.id)).map((user) => (
+                                        <button
+                                            key={user.id}
+                                            type='button'
+                                            onClick={() => handleAddAssignee(user)}
+                                            style={{
+                                                display: 'block',
+                                                width: '100%',
+                                                textAlign: 'left',
+                                                padding: '8px 12px',
+                                                border: 'none',
+                                                backgroundColor: 'transparent',
+                                                cursor: 'pointer',
+                                                fontSize: '14px',
+                                                color: 'var(--center-channel-color, #3d3c40)',
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                (e.target as HTMLButtonElement).style.backgroundColor = 'rgba(61, 60, 64, 0.08)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                (e.target as HTMLButtonElement).style.backgroundColor = 'transparent';
+                                            }}
+                                        >
+                                            <div>{user.name}</div>
+                                            {user.email && (
+                                                <div style={{fontSize: '12px', color: 'rgba(61, 60, 64, 0.56)'}}>{user.email}</div>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Description */}
                         <div style={{marginBottom: '16px'}}>
                             <label
                                 htmlFor='pd-post-incident-description-input'
-                                style={{display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '14px'}}
+                                style={labelStyle}
                             >
                                 {'Description'}
                             </label>
@@ -288,17 +529,10 @@ const CreateIncidentPostModal: React.FC = () => {
                                 onChange={(e) => setDescription(e.target.value)}
                                 placeholder='Additional details about the incident'
                                 style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    borderRadius: '4px',
-                                    border: '1px solid rgba(61, 60, 64, 0.16)',
-                                    fontSize: '14px',
-                                    backgroundColor: 'var(--center-channel-bg, #fff)',
-                                    color: 'var(--center-channel-color, #3d3c40)',
-                                    minHeight: '100px',
+                                    ...inputStyle,
+                                    minHeight: '80px',
                                     resize: 'vertical' as const,
                                     fontFamily: 'inherit',
-                                    boxSizing: 'border-box',
                                 }}
                             />
                         </div>

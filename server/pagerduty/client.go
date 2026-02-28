@@ -214,7 +214,7 @@ func (c *Client) GetServices(limit, offset int) (*ServicesResponse, error) {
 }
 
 // CreateIncident creates a new incident in PagerDuty
-func (c *Client) CreateIncident(title, description, serviceID string, assigneeIDs []string) (*CreateIncidentResponse, error) {
+func (c *Client) CreateIncident(title, description, serviceID, urgency string, assigneeIDs []string) (*CreateIncidentResponse, error) {
 	incident := Incident{
 		Type:        "incident",
 		Title:       title,
@@ -223,6 +223,11 @@ func (c *Client) CreateIncident(title, description, serviceID string, assigneeID
 			ID:   serviceID,
 			Type: "service_reference",
 		},
+	}
+
+	// Set urgency if provided (defaults to "high" in PagerDuty)
+	if urgency != "" {
+		incident.Urgency = urgency
 	}
 
 	// Add assignments if provided

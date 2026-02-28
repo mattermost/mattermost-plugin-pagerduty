@@ -97,6 +97,12 @@ export interface OnCallsResponse extends ListResponse {
     oncalls: OnCall[];
 }
 
+export interface EscalationPolicyReference {
+    id: string;
+    type: string;
+    summary?: string;
+}
+
 export interface Service {
     id: string;
     name: string;
@@ -104,6 +110,7 @@ export interface Service {
     type: string;
     summary: string;
     status: string;
+    escalation_policy?: EscalationPolicyReference;
 }
 
 export interface ServicesResponse extends ListResponse {

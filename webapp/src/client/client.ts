@@ -98,13 +98,16 @@ export class Client {
         return response.json();
     }
 
-    async createIncident(title: string, description: string, serviceId: string, assigneeIds?: string[]) {
-        const body = {
+    async createIncident(title: string, description: string, serviceId: string, urgency?: string, assigneeIds?: string[]) {
+        const body: Record<string, unknown> = {
             title,
             description,
             service_id: serviceId,
             assignee_ids: assigneeIds || [],
         };
+        if (urgency) {
+            body.urgency = urgency;
+        }
 
         const response = await this.doFetch(`${this.baseUrl}/incidents`, {
             method: 'POST',
