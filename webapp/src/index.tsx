@@ -6,8 +6,8 @@ import type {Store, Action} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
 
+import CreateIncidentMenuItem from './components/create_incident_menu_item';
 import CreateIncidentPostModal from './components/create_incident_post_modal';
-import type {PostIncidentEventDetail} from './components/create_incident_post_modal';
 import PagerDutySidebar from './components/sidebar/sidebar';
 
 import manifest from '@/manifest';
@@ -53,24 +53,8 @@ export default class Plugin {
         // Register root component for incident creation modal (rendered at app root)
         registry.registerRootComponent(CreateIncidentPostModal);
 
-        // Register post dropdown menu action to create PagerDuty incident from a post
-        registry.registerPostDropdownMenuAction(
-            'Create PagerDuty Incident',
-            (postId: string) => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const state = store.getState() as any;
-                const post = state.entities?.posts?.posts?.[postId];
-                if (post && post.message) {
-                    const detail: PostIncidentEventDetail = {
-                        postId: post.id,
-                        postMessage: post.message,
-                    };
-                    window.dispatchEvent(
-                        new CustomEvent('pagerduty-create-incident-from-post', {detail}),
-                    );
-                }
-            },
-        );
+        // Register post dropdown menu component to create PagerDuty incident from a post
+        registry.registerPostDropdownMenuComponent(CreateIncidentMenuItem);
     }
 }
 

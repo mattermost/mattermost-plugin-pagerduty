@@ -18,11 +18,7 @@ export interface PluginRegistry {
         tooltipText?: string
     ): void;
 
-    registerPostDropdownMenuAction(
-        text: string,
-        action: (postId: string) => void | Promise<void>,
-        filter?: (postId: string) => boolean
-    ): {id: string};
+    registerPostDropdownMenuComponent(component: React.ComponentType<{postId: string}>): {id: string};
 
     registerRootComponent(component: React.ComponentType): void;
 
