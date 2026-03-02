@@ -443,7 +443,6 @@ describe('CreateIncidentPostModal', () => {
 
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
-        fireEvent.focus(assigneeInput);
 
         // Advance the debounce timer
         act(() => {
@@ -476,7 +475,6 @@ describe('CreateIncidentPostModal', () => {
         // Search and add an assignee
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
-        fireEvent.focus(assigneeInput);
 
         act(() => {
             jest.advanceTimersByTime(300);
@@ -527,7 +525,6 @@ describe('CreateIncidentPostModal', () => {
         // Add a user assignee
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
-        fireEvent.focus(assigneeInput);
 
         act(() => {
             jest.advanceTimersByTime(300);
@@ -578,7 +575,7 @@ describe('CreateIncidentPostModal', () => {
 
         // Focus the assign input to open the dropdown
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
-        fireEvent.focus(assigneeInput);
+        fireEvent.click(assigneeInput);
 
         await waitFor(() => {
             expect(screen.getByText('Schedules')).toBeInTheDocument();
@@ -605,7 +602,7 @@ describe('CreateIncidentPostModal', () => {
         });
 
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
-        fireEvent.focus(assigneeInput);
+        fireEvent.click(assigneeInput);
 
         await waitFor(() => {
             expect(screen.getByText(/On call: Alice/)).toBeInTheDocument();
@@ -628,7 +625,7 @@ describe('CreateIncidentPostModal', () => {
         });
 
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
-        fireEvent.focus(assigneeInput);
+        fireEvent.click(assigneeInput);
 
         await waitFor(() => {
             expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
@@ -672,7 +669,7 @@ describe('CreateIncidentPostModal', () => {
 
         // Add schedule as assignee
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
-        fireEvent.focus(assigneeInput);
+        fireEvent.click(assigneeInput);
 
         await waitFor(() => {
             expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
@@ -716,7 +713,6 @@ describe('CreateIncidentPostModal', () => {
 
         const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'Primary'}});
-        fireEvent.focus(assigneeInput);
 
         await waitFor(() => {
             expect(screen.getByText('Primary On-Call')).toBeInTheDocument();

@@ -501,7 +501,11 @@ const CreateIncidentPostModal: React.FC = () => {
                                     setUserQuery(e.target.value);
                                     setShowAssignDropdown(true);
                                 }}
-                                onFocus={() => setShowAssignDropdown(true)}
+                                onClick={() => setShowAssignDropdown((prev) => !prev)}
+                                onBlur={() => {
+                                    // Delay closing so click events on dropdown items fire first
+                                    setTimeout(() => setShowAssignDropdown(false), 200);
+                                }}
                                 placeholder='Search schedules or users...'
                                 autoComplete='off'
                                 style={inputStyle}
