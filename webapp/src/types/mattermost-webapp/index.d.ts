@@ -18,5 +18,9 @@ export interface PluginRegistry {
         tooltipText?: string
     ): void;
 
+    registerPostDropdownMenuComponent(component: React.ComponentType<{postId: string}>): {id: string};
+
+    registerRootComponent(component: React.ComponentType): void;
+
     // Add more if needed from https://developers.mattermost.com/extend/plugins/webapp/reference
 }

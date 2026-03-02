@@ -179,6 +179,7 @@ type CreateIncidentRequest struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
 	ServiceID   string   `json:"service_id"`
+	Urgency     string   `json:"urgency,omitempty"`
 	AssigneeIDs []string `json:"assignee_ids,omitempty"`
 }
 
@@ -215,7 +216,7 @@ func (p *Plugin) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 
 	p.client.Log.Debug("Creating incident in PagerDuty", "title", req.Title, "service_id", req.ServiceID, "assignees", len(req.AssigneeIDs))
 
-	incident, err := pdClient.CreateIncident(req.Title, req.Description, req.ServiceID, req.AssigneeIDs)
+	incident, err := pdClient.CreateIncident(req.Title, req.Description, req.ServiceID, req.Urgency, req.AssigneeIDs)
 	if err != nil {
 		p.client.Log.Error("Failed to create incident in PagerDuty", "error", err.Error())
 		p.handleError(w, r, &APIError{

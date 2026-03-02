@@ -135,14 +135,22 @@ type RenderedScheduleEntry struct {
 	End   string `json:"end"`
 }
 
+// EscalationPolicyReference represents a reference to an escalation policy on a service
+type EscalationPolicyReference struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Summary string `json:"summary,omitempty"`
+}
+
 // Service represents a PagerDuty service
 type Service struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	Summary     string `json:"summary"`
-	Status      string `json:"status"`
+	ID               string                     `json:"id"`
+	Name             string                     `json:"name"`
+	Description      string                     `json:"description"`
+	Type             string                     `json:"type"`
+	Summary          string                     `json:"summary"`
+	Status           string                     `json:"status"`
+	EscalationPolicy *EscalationPolicyReference `json:"escalation_policy,omitempty"`
 }
 
 // ServicesResponse wraps the services list response
