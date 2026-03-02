@@ -18,6 +18,13 @@ func (p *Plugin) processWebhookEvent(event *pagerduty.WebhookEvent) {
 		return
 	}
 
+	p.client.Log.Debug("Processing webhook event",
+		"event_type", event.EventType,
+		"incident_id", incidentData.ID,
+		"service_id", incidentData.Service.ID,
+		"service_name", incidentData.Service.Summary,
+	)
+
 	// Format the notification message
 	message := p.formatIncidentNotification(event.EventType, &incidentData)
 	if message == "" {
@@ -26,28 +33,30 @@ func (p *Plugin) processWebhookEvent(event *pagerduty.WebhookEvent) {
 	}
 
 	// Get all channel subscriptions and post to matching ones
-	p.routeToSubscribedChannels(event.EventType, incidentData.Service.ID, message)
+	p.routeToSubscribedChannels(event.EventType, []string{incidentData.Service.ID}, message)
 }
 
 // routeToSubscribedChannels sends a notification to all channels that are subscribed
-// to the given event type and (optionally) filtered by service ID.
-func (p *Plugin) routeToSubscribedChannels(eventType, serviceID, message string) {
+// to the given event type and (optionally) filtered by service IDs.
+func (p *Plugin) routeToSubscribedChannels(eventType string, serviceIDs []string, message string) {
 	index, err := p.kvstore.GetSubscriptionIndex()
 	if err != nil {
 		p.client.Log.Error("Failed to get subscription index", "error", err.Error())
 		return
 	}
 
+	matchCount := 0
 	for _, channelID := range index {
 		sub, subErr := p.kvstore.GetChannelSubscription(channelID)
 		if subErr != nil || sub == nil {
 			continue
 		}
 
-		if !p.subscriptionMatchesEvent(sub, eventType, serviceID) {
+		if !p.subscriptionMatchesEvent(sub, eventType, serviceIDs) {
 			continue
 		}
 
+		matchCount++
 		if postErr := p.postToChannel(channelID, message); postErr != nil {
 			p.client.Log.Error("Failed to post notification to channel",
 				"channel_id", channelID,
@@ -55,10 +64,17 @@ func (p *Plugin) routeToSubscribedChannels(eventType, serviceID, message string)
 			)
 		}
 	}
+
+	p.client.Log.Debug("Routed event to subscribed channels",
+		"event_type", eventType,
+		"service_ids", strings.Join(serviceIDs, ","),
+		"matched_channels", matchCount,
+		"total_subscriptions", len(index),
+	)
 }
 
 // subscriptionMatchesEvent checks whether a channel subscription matches an event.
-func (p *Plugin) subscriptionMatchesEvent(sub *ChannelSubscription, eventType, serviceID string) bool {
+func (p *Plugin) subscriptionMatchesEvent(sub *ChannelSubscription, eventType string, serviceIDs []string) bool {
 	// Check event type match
 	typeMatch := false
 	for _, et := range sub.EventTypes {
@@ -71,14 +87,23 @@ func (p *Plugin) subscriptionMatchesEvent(sub *ChannelSubscription, eventType, s
 		return false
 	}
 
-	// Check service filter (empty means all services)
+	// Check service filter (empty subscription filter means all services)
 	if len(sub.ServiceIDs) == 0 {
 		return true
 	}
 
-	for _, sid := range sub.ServiceIDs {
-		if sid == serviceID {
-			return true
+	// Subscription has a service filter but event has no service context
+	// (e.g., EP→service cache not yet populated). Skip to avoid false positives.
+	if len(serviceIDs) == 0 {
+		return false
+	}
+
+	// Check if ANY of the event's service IDs match ANY of the subscription's service IDs
+	for _, subSID := range sub.ServiceIDs {
+		for _, eventSID := range serviceIDs {
+			if subSID == eventSID {
+				return true
+			}
 		}
 	}
 
