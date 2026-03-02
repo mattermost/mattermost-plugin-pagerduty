@@ -4,7 +4,7 @@
 import React, {useState, useEffect, useCallback, useMemo} from 'react';
 
 import client from '@/client/client';
-import type {Service, ServicesResponse, CreateIncidentResponse, OnCall, OnCallsResponse, User, UsersResponse} from '@/types/pagerduty';
+import type {Service, ServicesResponse, CreateIncidentResponse, OnCall, OnCallsResponse, User, UsersResponse, Schedule, SchedulesResponse} from '@/types/pagerduty';
 
 export interface PostIncidentEventDetail {
     postId: string;
@@ -37,10 +37,11 @@ const CreateIncidentPostModal: React.FC = () => {
     const [urgency, setUrgency] = useState('high');
     const [services, setServices] = useState<Service[]>([]);
     const [onCalls, setOnCalls] = useState<OnCall[]>([]);
+    const [schedules, setSchedules] = useState<Schedule[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [userQuery, setUserQuery] = useState('');
-    const [selectedAssignees, setSelectedAssignees] = useState<User[]>([]);
-    const [showUserDropdown, setShowUserDropdown] = useState(false);
+    const [selectedAssignees, setSelectedAssignees] = useState<Array<{id: string; name: string; type: 'user' | 'schedule'}>>([]);
+    const [showAssignDropdown, setShowAssignDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadingServices, setLoadingServices] = useState(false);
     const [loadingUsers, setLoadingUsers] = useState(false);
@@ -55,10 +56,11 @@ const CreateIncidentPostModal: React.FC = () => {
         setUrgency('high');
         setServices([]);
         setOnCalls([]);
+        setSchedules([]);
         setUsers([]);
         setUserQuery('');
         setSelectedAssignees([]);
-        setShowUserDropdown(false);
+        setShowAssignDropdown(false);
         setError(null);
         setSuccess(null);
         setLoading(false);
@@ -97,12 +99,14 @@ const CreateIncidentPostModal: React.FC = () => {
         const fetchData = async () => {
             try {
                 setLoadingServices(true);
-                const [servicesResp, onCallsResp]: [ServicesResponse, OnCallsResponse] = await Promise.all([
+                const [servicesResp, onCallsResp, schedulesResp]: [ServicesResponse, OnCallsResponse, SchedulesResponse] = await Promise.all([
                     client.getServices(),
                     client.getOnCalls(),
+                    client.getSchedules(),
                 ]);
                 setServices(servicesResp.services || []);
                 setOnCalls(onCallsResp.oncalls || []);
+                setSchedules(schedulesResp.schedules || []);
                 if (servicesResp.services?.length > 0) {
                     setSelectedServiceId(servicesResp.services[0].id);
                 }
@@ -154,7 +158,7 @@ const CreateIncidentPostModal: React.FC = () => {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, handleClose]);
 
-    // Get on-call users for the selected service
+    // Get on-call users for the selected service, deduplicated by user ID
     const serviceOnCalls = useMemo(() => {
         if (!selectedServiceId || !onCalls.length || !services.length) {
             return [];
@@ -166,20 +170,54 @@ const CreateIncidentPostModal: React.FC = () => {
         }
 
         const epId = selectedService.escalation_policy.id;
-        return onCalls.filter((oc) => oc.escalation_policy?.id === epId);
+        const matched = onCalls.filter((oc) => oc.escalation_policy?.id === epId);
+
+        // Deduplicate by user ID, keeping the lowest escalation level entry
+        const seen = new Map<string, OnCall>();
+        for (const oc of matched) {
+            const existing = seen.get(oc.user.id);
+            if (!existing || oc.escalation_level < existing.escalation_level) {
+                seen.set(oc.user.id, oc);
+            }
+        }
+        return Array.from(seen.values());
     }, [selectedServiceId, onCalls, services]);
 
-    const handleAddAssignee = useCallback((user: User) => {
-        if (!selectedAssignees.some((a) => a.id === user.id)) {
-            setSelectedAssignees((prev) => [...prev, user]);
+    // Get on-call users per schedule (for schedule assignment)
+    const scheduleOnCallMap = useMemo(() => {
+        const map = new Map<string, OnCall[]>();
+        for (const oc of onCalls) {
+            if (oc.schedule?.id) {
+                const existing = map.get(oc.schedule.id) || [];
+
+                // Deduplicate by user ID within each schedule
+                if (!existing.some((e) => e.user.id === oc.user.id)) {
+                    existing.push(oc);
+                    map.set(oc.schedule.id, existing);
+                }
+            }
+        }
+        return map;
+    }, [onCalls]);
+
+    const handleAddUserAssignee = useCallback((user: User) => {
+        if (!selectedAssignees.some((a) => a.id === user.id && a.type === 'user')) {
+            setSelectedAssignees((prev) => [...prev, {id: user.id, name: user.name, type: 'user'}]);
         }
         setUserQuery('');
         setUsers([]);
-        setShowUserDropdown(false);
+        setShowAssignDropdown(false);
     }, [selectedAssignees]);
 
-    const handleRemoveAssignee = useCallback((userId: string) => {
-        setSelectedAssignees((prev) => prev.filter((a) => a.id !== userId));
+    const handleAddScheduleAssignee = useCallback((schedule: Schedule) => {
+        if (!selectedAssignees.some((a) => a.id === schedule.id && a.type === 'schedule')) {
+            setSelectedAssignees((prev) => [...prev, {id: schedule.id, name: schedule.name, type: 'schedule'}]);
+        }
+        setShowAssignDropdown(false);
+    }, [selectedAssignees]);
+
+    const handleRemoveAssignee = useCallback((id: string, type: 'user' | 'schedule') => {
+        setSelectedAssignees((prev) => prev.filter((a) => !(a.id === id && a.type === type)));
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -194,8 +232,20 @@ const CreateIncidentPostModal: React.FC = () => {
         setError(null);
 
         try {
-            const assigneeIds = selectedAssignees.length > 0 ?
-                selectedAssignees.map((a) => a.id) :
+            // Resolve assignees: users pass through directly, schedules resolve to on-call user(s)
+            const resolvedUserIds = new Set<string>();
+            for (const assignee of selectedAssignees) {
+                if (assignee.type === 'user') {
+                    resolvedUserIds.add(assignee.id);
+                } else if (assignee.type === 'schedule') {
+                    const scheduleOcUsers = scheduleOnCallMap.get(assignee.id) || [];
+                    for (const oc of scheduleOcUsers) {
+                        resolvedUserIds.add(oc.user.id);
+                    }
+                }
+            }
+            const assigneeIds = resolvedUserIds.size > 0 ?
+                Array.from(resolvedUserIds) :
                 undefined;
 
             const incident: CreateIncidentResponse = await client.createIncident(
@@ -404,23 +454,26 @@ const CreateIncidentPostModal: React.FC = () => {
                             {/* Selected assignees */}
                             {selectedAssignees.length > 0 && (
                                 <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px'}}>
-                                    {selectedAssignees.map((user) => (
+                                    {selectedAssignees.map((assignee) => (
                                         <span
-                                            key={user.id}
+                                            key={`${assignee.type}-${assignee.id}`}
                                             style={{
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
                                                 gap: '4px',
                                                 padding: '2px 8px',
                                                 borderRadius: '12px',
-                                                backgroundColor: 'rgba(61, 60, 64, 0.08)',
+                                                backgroundColor: assignee.type === 'schedule' ? 'rgba(22, 109, 224, 0.08)' : 'rgba(61, 60, 64, 0.08)',
                                                 fontSize: '13px',
                                             }}
                                         >
-                                            {user.name}
+                                            {assignee.type === 'schedule' && (
+                                                <span style={{fontSize: '11px', opacity: 0.7}}>{'[Schedule]'}</span>
+                                            )}
+                                            {assignee.name}
                                             <button
                                                 type='button'
-                                                onClick={() => handleRemoveAssignee(user.id)}
+                                                onClick={() => handleRemoveAssignee(assignee.id, assignee.type)}
                                                 style={{
                                                     background: 'none',
                                                     border: 'none',
@@ -431,7 +484,7 @@ const CreateIncidentPostModal: React.FC = () => {
                                                     color: 'inherit',
                                                     opacity: 0.6,
                                                 }}
-                                                aria-label={`Remove ${user.name}`}
+                                                aria-label={`Remove ${assignee.name}`}
                                             >
                                                 {'\u00d7'}
                                             </button>
@@ -446,24 +499,24 @@ const CreateIncidentPostModal: React.FC = () => {
                                 value={userQuery}
                                 onChange={(e) => {
                                     setUserQuery(e.target.value);
-                                    setShowUserDropdown(true);
+                                    setShowAssignDropdown(true);
                                 }}
-                                onFocus={() => setShowUserDropdown(true)}
-                                placeholder='Search PagerDuty users...'
+                                onFocus={() => setShowAssignDropdown(true)}
+                                placeholder='Search schedules or users...'
                                 autoComplete='off'
                                 style={inputStyle}
                             />
 
-                            {/* User search dropdown */}
-                            {showUserDropdown && userQuery.trim() && (
+                            {/* Assignment dropdown: schedules + user search */}
+                            {showAssignDropdown && (
                                 <div
-                                    className='pagerduty-user-dropdown'
+                                    className='pagerduty-assign-dropdown'
                                     style={{
                                         position: 'absolute',
                                         top: '100%',
                                         left: 0,
                                         right: 0,
-                                        maxHeight: '160px',
+                                        maxHeight: '220px',
                                         overflow: 'auto',
                                         backgroundColor: 'var(--center-channel-bg, #fff)',
                                         border: '1px solid rgba(61, 60, 64, 0.16)',
@@ -472,45 +525,113 @@ const CreateIncidentPostModal: React.FC = () => {
                                         zIndex: 1,
                                     }}
                                 >
-                                    {loadingUsers && (
-                                        <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
-                                            {'Searching...'}
-                                        </div>
+                                    {/* Schedules section */}
+                                    {schedules.filter((s) => {
+                                        if (selectedAssignees.some((a) => a.id === s.id && a.type === 'schedule')) {
+                                            return false;
+                                        }
+                                        if (userQuery.trim()) {
+                                            return s.name.toLowerCase().includes(userQuery.toLowerCase());
+                                        }
+                                        return true;
+                                    }).length > 0 && (
+                                        <>
+                                            <div style={{padding: '6px 12px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(61, 60, 64, 0.56)', letterSpacing: '0.5px'}}>
+                                                {'Schedules'}
+                                            </div>
+                                            {schedules.filter((s) => {
+                                                if (selectedAssignees.some((a) => a.id === s.id && a.type === 'schedule')) {
+                                                    return false;
+                                                }
+                                                if (userQuery.trim()) {
+                                                    return s.name.toLowerCase().includes(userQuery.toLowerCase());
+                                                }
+                                                return true;
+                                            }).map((schedule) => {
+                                                const ocUsers = scheduleOnCallMap.get(schedule.id) || [];
+                                                return (
+                                                    <button
+                                                        key={`schedule-${schedule.id}`}
+                                                        type='button'
+                                                        onClick={() => handleAddScheduleAssignee(schedule)}
+                                                        style={{
+                                                            display: 'block',
+                                                            width: '100%',
+                                                            textAlign: 'left',
+                                                            padding: '8px 12px',
+                                                            border: 'none',
+                                                            backgroundColor: 'transparent',
+                                                            cursor: 'pointer',
+                                                            fontSize: '14px',
+                                                            color: 'var(--center-channel-color, #3d3c40)',
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(61, 60, 64, 0.08)';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+                                                        }}
+                                                    >
+                                                        <div>{schedule.name}</div>
+                                                        {ocUsers.length > 0 && (
+                                                            <div style={{fontSize: '12px', color: 'rgba(61, 60, 64, 0.56)'}}>
+                                                                {'On call: '}
+                                                                {ocUsers.map((oc) => oc.user.name || oc.user.summary).join(', ')}
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </>
                                     )}
-                                    {!loadingUsers && users.length === 0 && (
-                                        <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
-                                            {'No users found'}
-                                        </div>
-                                    )}
-                                    {users.filter((u) => !selectedAssignees.some((a) => a.id === u.id)).map((user) => (
-                                        <button
-                                            key={user.id}
-                                            type='button'
-                                            onClick={() => handleAddAssignee(user)}
-                                            style={{
-                                                display: 'block',
-                                                width: '100%',
-                                                textAlign: 'left',
-                                                padding: '8px 12px',
-                                                border: 'none',
-                                                backgroundColor: 'transparent',
-                                                cursor: 'pointer',
-                                                fontSize: '14px',
-                                                color: 'var(--center-channel-color, #3d3c40)',
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                (e.target as HTMLButtonElement).style.backgroundColor = 'rgba(61, 60, 64, 0.08)';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                (e.target as HTMLButtonElement).style.backgroundColor = 'transparent';
-                                            }}
-                                        >
-                                            <div>{user.name}</div>
-                                            {user.email && (
-                                                <div style={{fontSize: '12px', color: 'rgba(61, 60, 64, 0.56)'}}>{user.email}</div>
+
+                                    {/* Users section (search results) */}
+                                    {userQuery.trim() && (
+                                        <>
+                                            <div style={{padding: '6px 12px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(61, 60, 64, 0.56)', letterSpacing: '0.5px', borderTop: schedules.length > 0 ? '1px solid rgba(61, 60, 64, 0.08)' : 'none'}}>
+                                                {'Users'}
+                                            </div>
+                                            {loadingUsers && (
+                                                <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
+                                                    {'Searching...'}
+                                                </div>
                                             )}
-                                        </button>
-                                    ))}
+                                            {!loadingUsers && users.length === 0 && (
+                                                <div style={{padding: '8px 12px', fontSize: '13px', color: 'rgba(61, 60, 64, 0.56)'}}>
+                                                    {'No users found'}
+                                                </div>
+                                            )}
+                                            {users.filter((u) => !selectedAssignees.some((a) => a.id === u.id && a.type === 'user')).map((user) => (
+                                                <button
+                                                    key={`user-${user.id}`}
+                                                    type='button'
+                                                    onClick={() => handleAddUserAssignee(user)}
+                                                    style={{
+                                                        display: 'block',
+                                                        width: '100%',
+                                                        textAlign: 'left',
+                                                        padding: '8px 12px',
+                                                        border: 'none',
+                                                        backgroundColor: 'transparent',
+                                                        cursor: 'pointer',
+                                                        fontSize: '14px',
+                                                        color: 'var(--center-channel-color, #3d3c40)',
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(61, 60, 64, 0.08)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+                                                    }}
+                                                >
+                                                    <div>{user.name}</div>
+                                                    {user.email && (
+                                                        <div style={{fontSize: '12px', color: 'rgba(61, 60, 64, 0.56)'}}>{user.email}</div>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>

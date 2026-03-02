@@ -22,12 +22,20 @@ const mockServicesResponse = (services: Service[] = [{id: 'SVC1', name: 'Web App
     total: services.length,
 });
 
-const mockOnCallsResponse = (oncalls: Array<{user: {id: string; name: string; summary: string}; escalation_policy?: {id: string; name: string}; escalation_level: number}> = []) => ({
+const mockOnCallsResponse = (oncalls: Array<{user: {id: string; name: string; summary: string}; schedule?: {id: string; name: string}; escalation_policy?: {id: string; name: string}; escalation_level: number}> = []) => ({
     oncalls,
     limit: 100,
     offset: 0,
     more: false,
     total: oncalls.length,
+});
+
+const mockSchedulesResponse = (schedules: Array<{id: string; name: string; description: string; time_zone: string; summary: string}> = []) => ({
+    schedules,
+    limit: 100,
+    offset: 0,
+    more: false,
+    total: schedules.length,
 });
 
 const mockUsersResponse = (users: Array<{id: string; name: string; email: string; type: string; summary: string; description: string; role: string; time_zone: string; color: string; avatar_url: string}> = []) => ({
@@ -41,6 +49,7 @@ const mockUsersResponse = (users: Array<{id: string; name: string; email: string
 const setupDefaultMocks = () => {
     mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
     mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+    mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 };
 
 const dispatchPostEvent = (detail: PostIncidentEventDetail) => {
@@ -121,6 +130,7 @@ describe('CreateIncidentPostModal', () => {
         ];
         mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
         await openModal();
@@ -134,6 +144,7 @@ describe('CreateIncidentPostModal', () => {
     it('should show error when services fail to load', async () => {
         mockClient.getServices.mockRejectedValueOnce(new Error('Network error'));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
 
@@ -254,6 +265,7 @@ describe('CreateIncidentPostModal', () => {
         ];
         mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
         await openModal();
@@ -323,11 +335,12 @@ describe('CreateIncidentPostModal', () => {
             {id: 'SVC1', name: 'Web App', description: '', type: 'service', summary: '', status: 'active', escalation_policy: {id: 'EP1', type: 'escalation_policy_reference', summary: 'Default'}},
         ];
         const oncalls = [
-            {user: {id: 'U1', name: 'Alice Smith', summary: 'Alice Smith'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+            {user: {id: 'U1', name: 'Alice Smith', summary: 'Alice Smith'}, schedule: {id: 'SCH1', name: 'Primary'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
         ];
 
         mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
         await openModal();
@@ -343,12 +356,13 @@ describe('CreateIncidentPostModal', () => {
             {id: 'SVC1', name: 'Web App', description: '', type: 'service', summary: '', status: 'active', escalation_policy: {id: 'EP1', type: 'escalation_policy_reference', summary: 'Default'}},
         ];
         const oncalls = [
-            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
-            {user: {id: 'U2', name: 'Bob', summary: 'Bob'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 2},
+            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, schedule: {id: 'SCH1', name: 'Primary'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+            {user: {id: 'U2', name: 'Bob', summary: 'Bob'}, schedule: {id: 'SCH2', name: 'Secondary'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 2},
         ];
 
         mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
         await openModal();
@@ -358,6 +372,35 @@ describe('CreateIncidentPostModal', () => {
             expect(screen.getByText(/Alice/)).toBeInTheDocument();
             expect(screen.getByText(/\(L2\)/)).toBeInTheDocument();
         });
+    });
+
+    it('should deduplicate on-call users by user ID', async () => {
+        const services = [
+            {id: 'SVC1', name: 'Web App', description: '', type: 'service', summary: '', status: 'active', escalation_policy: {id: 'EP1', type: 'escalation_policy_reference', summary: 'Default'}},
+        ];
+
+        // Same user appears twice (on-call in two schedules within same EP)
+        const oncalls = [
+            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, schedule: {id: 'SCH1', name: 'Primary'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, schedule: {id: 'SCH2', name: 'Secondary'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+        ];
+
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Currently on call:')).toBeInTheDocument();
+        });
+
+        // Alice should only appear once (deduplicated)
+        const onCallLabel = screen.getByText('Currently on call:');
+        const onCallInfo = onCallLabel.closest('.pagerduty-oncall-info')!;
+        const aliceMatches = onCallInfo.textContent!.match(/Alice/g);
+        expect(aliceMatches).toHaveLength(1);
     });
 
     it('should not show on-call info when service has no matching escalation policy', async () => {
@@ -370,6 +413,7 @@ describe('CreateIncidentPostModal', () => {
 
         mockClient.getServices.mockResolvedValueOnce(mockServicesResponse(services));
         mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse());
 
         render(<CreateIncidentPostModal/>);
         await openModal();
@@ -381,7 +425,7 @@ describe('CreateIncidentPostModal', () => {
         expect(screen.queryByText('Currently on call:')).not.toBeInTheDocument();
     });
 
-    // --- Assignee search tests ---
+    // --- User assignee search tests ---
 
     it('should search for users when typing in assignee field', async () => {
         setupDefaultMocks();
@@ -397,7 +441,7 @@ describe('CreateIncidentPostModal', () => {
             expect(screen.getByText('Web App')).toBeInTheDocument();
         });
 
-        const assigneeInput = screen.getByPlaceholderText('Search PagerDuty users...');
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
         fireEvent.focus(assigneeInput);
 
@@ -415,7 +459,7 @@ describe('CreateIncidentPostModal', () => {
         });
     });
 
-    it('should add and remove assignees', async () => {
+    it('should add and remove user assignees', async () => {
         setupDefaultMocks();
         const users = [
             {id: 'U1', name: 'Alice Smith', email: 'alice@example.com', type: 'user', summary: 'Alice Smith', description: '', role: 'user', time_zone: 'UTC', color: '', avatar_url: ''},
@@ -430,7 +474,7 @@ describe('CreateIncidentPostModal', () => {
         });
 
         // Search and add an assignee
-        const assigneeInput = screen.getByPlaceholderText('Search PagerDuty users...');
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
         fireEvent.focus(assigneeInput);
 
@@ -442,8 +486,10 @@ describe('CreateIncidentPostModal', () => {
             expect(screen.getByText('alice@example.com')).toBeInTheDocument();
         });
 
-        // Click to add the user
-        fireEvent.click(screen.getByText('Alice Smith'));
+        // Click to add the user (select from users section)
+        const userButtons = screen.getAllByText('Alice Smith');
+        const userButton = userButtons.find((el) => el.closest('.pagerduty-assign-dropdown'));
+        fireEvent.click(userButton!);
 
         // Verify chip is shown
         await waitFor(() => {
@@ -456,7 +502,7 @@ describe('CreateIncidentPostModal', () => {
         expect(screen.queryByLabelText('Remove Alice Smith')).not.toBeInTheDocument();
     });
 
-    it('should submit incident with assignees', async () => {
+    it('should submit incident with user assignees', async () => {
         setupDefaultMocks();
         const users = [
             {id: 'U1', name: 'Alice Smith', email: 'alice@example.com', type: 'user', summary: 'Alice Smith', description: '', role: 'user', time_zone: 'UTC', color: '', avatar_url: ''},
@@ -478,8 +524,8 @@ describe('CreateIncidentPostModal', () => {
             expect(screen.getByText('Web App')).toBeInTheDocument();
         });
 
-        // Add an assignee
-        const assigneeInput = screen.getByPlaceholderText('Search PagerDuty users...');
+        // Add a user assignee
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
         fireEvent.change(assigneeInput, {target: {value: 'alice'}});
         fireEvent.focus(assigneeInput);
 
@@ -491,7 +537,9 @@ describe('CreateIncidentPostModal', () => {
             expect(screen.getByText('alice@example.com')).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByText('Alice Smith'));
+        const userButtons = screen.getAllByText('Alice Smith');
+        const userButton = userButtons.find((el) => el.closest('.pagerduty-assign-dropdown'));
+        fireEvent.click(userButton!);
 
         await waitFor(() => {
             expect(screen.getByLabelText('Remove Alice Smith')).toBeInTheDocument();
@@ -509,5 +557,172 @@ describe('CreateIncidentPostModal', () => {
                 ['U1'],
             );
         });
+    });
+
+    // --- Schedule assignment tests ---
+
+    it('should show schedules in assign dropdown when focused', async () => {
+        const schedules = [
+            {id: 'SCH1', name: 'Primary On-Call', description: '', time_zone: 'UTC', summary: 'Primary On-Call'},
+        ];
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse(schedules));
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Web App')).toBeInTheDocument();
+        });
+
+        // Focus the assign input to open the dropdown
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
+        fireEvent.focus(assigneeInput);
+
+        await waitFor(() => {
+            expect(screen.getByText('Schedules')).toBeInTheDocument();
+            expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
+        });
+    });
+
+    it('should show on-call user info in schedule dropdown items', async () => {
+        const schedules = [
+            {id: 'SCH1', name: 'Primary On-Call', description: '', time_zone: 'UTC', summary: 'Primary On-Call'},
+        ];
+        const oncalls = [
+            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, schedule: {id: 'SCH1', name: 'Primary On-Call'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+        ];
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse(schedules));
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Web App')).toBeInTheDocument();
+        });
+
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
+        fireEvent.focus(assigneeInput);
+
+        await waitFor(() => {
+            expect(screen.getByText(/On call: Alice/)).toBeInTheDocument();
+        });
+    });
+
+    it('should add schedule as assignee and show chip with schedule label', async () => {
+        const schedules = [
+            {id: 'SCH1', name: 'Primary On-Call', description: '', time_zone: 'UTC', summary: 'Primary On-Call'},
+        ];
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse(schedules));
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Web App')).toBeInTheDocument();
+        });
+
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
+        fireEvent.focus(assigneeInput);
+
+        await waitFor(() => {
+            expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
+        });
+
+        // Click to add the schedule
+        fireEvent.click(screen.getByText('Primary On-Call'));
+
+        // Verify chip with [Schedule] label is shown
+        await waitFor(() => {
+            expect(screen.getByText('[Schedule]')).toBeInTheDocument();
+            expect(screen.getByLabelText('Remove Primary On-Call')).toBeInTheDocument();
+        });
+    });
+
+    it('should resolve schedule assignees to on-call user IDs on submit', async () => {
+        const schedules = [
+            {id: 'SCH1', name: 'Primary On-Call', description: '', time_zone: 'UTC', summary: 'Primary On-Call'},
+        ];
+        const oncalls = [
+            {user: {id: 'U1', name: 'Alice', summary: 'Alice'}, schedule: {id: 'SCH1', name: 'Primary On-Call'}, escalation_policy: {id: 'EP1', name: 'Default'}, escalation_level: 1},
+        ];
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse(oncalls));
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse(schedules));
+        mockClient.createIncident.mockResolvedValueOnce({
+            incident: {
+                id: 'INC1',
+                type: 'incident',
+                title: 'Server is down!',
+                service: {id: 'SVC1', type: 'service_reference'},
+            },
+        });
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Web App')).toBeInTheDocument();
+        });
+
+        // Add schedule as assignee
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
+        fireEvent.focus(assigneeInput);
+
+        await waitFor(() => {
+            expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Primary On-Call'));
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Remove Primary On-Call')).toBeInTheDocument();
+        });
+
+        // Submit - should resolve schedule to Alice's user ID
+        fireEvent.click(screen.getByText('Create Incident'));
+
+        await waitFor(() => {
+            expect(mockClient.createIncident).toHaveBeenCalledWith(
+                'Server is down!',
+                'Server is down!',
+                'SVC1',
+                'high',
+                ['U1'],
+            );
+        });
+    });
+
+    it('should filter schedules by search query', async () => {
+        const schedules = [
+            {id: 'SCH1', name: 'Primary On-Call', description: '', time_zone: 'UTC', summary: 'Primary On-Call'},
+            {id: 'SCH2', name: 'Secondary Rotation', description: '', time_zone: 'UTC', summary: 'Secondary Rotation'},
+        ];
+        mockClient.getServices.mockResolvedValueOnce(mockServicesResponse());
+        mockClient.getOnCalls.mockResolvedValueOnce(mockOnCallsResponse());
+        mockClient.getSchedules.mockResolvedValueOnce(mockSchedulesResponse(schedules));
+
+        render(<CreateIncidentPostModal/>);
+        await openModal();
+
+        await waitFor(() => {
+            expect(screen.getByText('Web App')).toBeInTheDocument();
+        });
+
+        const assigneeInput = screen.getByPlaceholderText('Search schedules or users...');
+        fireEvent.change(assigneeInput, {target: {value: 'Primary'}});
+        fireEvent.focus(assigneeInput);
+
+        await waitFor(() => {
+            expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
+        });
+
+        // Secondary should be filtered out
+        expect(screen.queryByText('Secondary Rotation')).not.toBeInTheDocument();
     });
 });
