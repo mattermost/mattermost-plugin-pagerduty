@@ -298,7 +298,6 @@ const CreateIncidentPostModal: React.FC = () => {
                     width: '520px',
                     maxWidth: '90vw',
                     maxHeight: '90vh',
-                    overflow: 'auto',
                     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.12)',
                 }}
                 onClick={(e) => e.stopPropagation()}
