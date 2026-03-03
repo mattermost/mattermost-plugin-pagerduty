@@ -12,12 +12,19 @@ interface Props {
     loading: boolean;
     error: string | null;
     onPageUser?: (user: User) => void;
+    onScheduleClick?: (scheduleId: string) => void;
     onRetry?: () => void;
+}
+
+interface ScheduleInfo {
+    id?: string;
+    name: string;
+    escalationLevel: number;
 }
 
 interface GroupedUser {
     user: User;
-    schedules: Array<{name: string; escalationLevel: number}>;
+    schedules: ScheduleInfo[];
 }
 
 const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
@@ -43,7 +50,8 @@ const groupByUser = (onCalls: OnCall[]): GroupedUser[] => {
 
     for (const oncall of onCalls) {
         const existing = userMap.get(oncall.user.id);
-        const scheduleInfo = {
+        const scheduleInfo: ScheduleInfo = {
+            id: oncall.schedule?.id,
             name: oncall.schedule?.name || 'Unknown Schedule',
             escalationLevel: oncall.escalation_level,
         };
@@ -67,7 +75,7 @@ const groupByUser = (onCalls: OnCall[]): GroupedUser[] => {
     return Array.from(userMap.values());
 };
 
-const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser, onRetry}) => {
+const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser, onScheduleClick, onRetry}) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     if (loading) {
@@ -219,14 +227,44 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
                         <div
                             style={{
                                 fontSize: '12px',
-                                color: theme.centerChannelColor,
-                                opacity: 0.6,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap' as const,
                             }}
                         >
-                            {entry.schedules.map((s) => s.name).join(' \u00B7 ')}
+                            {entry.schedules.map((s, i) => (
+                                <React.Fragment key={s.id || s.name}>
+                                    {i > 0 && (
+                                        <span style={{color: theme.centerChannelColor, opacity: 0.4}}>
+                                            {' \u00B7 '}
+                                        </span>
+                                    )}
+                                    {onScheduleClick && s.id ? (
+                                        <button
+                                            className='oncall-schedule-link'
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onScheduleClick(s.id!);
+                                            }}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                padding: 0,
+                                                fontSize: '12px',
+                                                color: theme.linkColor,
+                                                cursor: 'pointer',
+                                                textDecoration: 'none',
+                                            }}
+                                        >
+                                            {s.name}
+                                        </button>
+                                    ) : (
+                                        <span style={{color: theme.centerChannelColor, opacity: 0.6}}>
+                                            {s.name}
+                                        </span>
+                                    )}
+                                </React.Fragment>
+                            ))}
                         </div>
                     </div>
                     {onPageUser && (

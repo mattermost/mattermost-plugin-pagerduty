@@ -5,7 +5,7 @@ import React from 'react';
 
 import OnCallList from './oncall_list';
 
-import {render, screen, mockTheme} from '@/test-utils';
+import {render, screen, fireEvent, mockTheme} from '@/test-utils';
 
 describe('OnCallList', () => {
     const mockOnCalls = [
@@ -153,8 +153,9 @@ describe('OnCallList', () => {
         const nameElements = screen.getAllByText('John Doe');
         expect(nameElements).toHaveLength(1);
 
-        // Both schedules shown as combined text
-        expect(screen.getByText('Primary \u00B7 Secondary')).toBeInTheDocument();
+        // Both schedules shown
+        expect(screen.getByText('Primary')).toBeInTheDocument();
+        expect(screen.getByText('Secondary')).toBeInTheDocument();
     });
 
     it('should show email as tooltip on user name', () => {
@@ -227,5 +228,39 @@ describe('OnCallList', () => {
 
         // Should show initial letter as fallback
         expect(screen.getByText('J')).toBeInTheDocument();
+    });
+
+    it('should render schedule names as clickable links when onScheduleClick provided', () => {
+        const handleScheduleClick = jest.fn();
+
+        render(
+            <OnCallList
+                onCalls={mockOnCalls}
+                theme={mockTheme}
+                loading={false}
+                error={null}
+                onScheduleClick={handleScheduleClick}
+            />,
+        );
+
+        const primaryLink = screen.getByText('Primary On-Call');
+        expect(primaryLink.tagName).toBe('BUTTON');
+
+        fireEvent.click(primaryLink);
+        expect(handleScheduleClick).toHaveBeenCalledWith('SCHED1');
+    });
+
+    it('should render schedule names as plain text when no onScheduleClick', () => {
+        render(
+            <OnCallList
+                onCalls={mockOnCalls}
+                theme={mockTheme}
+                loading={false}
+                error={null}
+            />,
+        );
+
+        const primaryText = screen.getByText('Primary On-Call');
+        expect(primaryText.tagName).toBe('SPAN');
     });
 });

@@ -857,6 +857,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             loading={loading}
                             error={error}
                             onPageUser={handlePageUser}
+                            onScheduleClick={(scheduleId: string) => {
+                                setActiveTab('schedules');
+                                handleScheduleClick(scheduleId);
+                            }}
                             onRetry={handleRetry}
                         />
                     )}
