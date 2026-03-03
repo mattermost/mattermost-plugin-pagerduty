@@ -352,7 +352,7 @@ describe('PagerDutySidebar', () => {
         expect(screen.getByText('Error: API Error')).toBeInTheDocument();
     });
 
-    it('should show back button when in detail view and hide tabs', async () => {
+    it('should show inline back link in detail view and keep tabs visible', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: [
             {user: {id: 'U1', name: 'Test User'}, schedule: {id: 'SCHED1', name: 'Primary'}, escalation_level: 1},
@@ -382,9 +382,9 @@ describe('PagerDutySidebar', () => {
             expect(screen.getByTestId('schedule-details')).toBeInTheDocument();
         });
 
-        // Back button should be visible, tabs should be hidden
-        expect(screen.getByTitle('Back')).toBeInTheDocument();
-        expect(screen.queryByTestId('tab-oncall')).not.toBeInTheDocument();
+        // Inline back link should be visible, tabs should remain visible
+        expect(screen.getByText('\u2190 Back to schedules')).toBeInTheDocument();
+        expect(screen.getByTestId('tab-oncall')).toBeInTheDocument();
     });
 
     it('should hide tab bar when settings view is active', async () => {

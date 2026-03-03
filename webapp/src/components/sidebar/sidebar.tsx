@@ -491,16 +491,8 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     // Determine header title
     const getHeaderTitle = (): string => {
-        if (selectedSchedule) {
-            return selectedSchedule.name || 'Schedule Details';
-        }
-        if (selectedIncident) {
-            return 'Incident Details';
-        }
         return currentUser?.name || 'PagerDuty';
     };
-
-    const showBackButton = selectedSchedule !== null || selectedIncident !== null;
 
     const tabs: Array<{key: TabName; label: string}> = [
         {key: 'oncall', label: 'On-Call'},
@@ -656,31 +648,11 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     alignItems: 'center',
                 }}
             >
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                    {showBackButton && (
-                        <button
-                            onClick={handleBack}
-                            aria-label='Go back'
-                            style={{
-                                backgroundColor: 'transparent',
-                                color: theme.linkColor,
-                                border: 'none',
-                                padding: '4px',
-                                cursor: 'pointer',
-                                fontSize: '18px',
-                                lineHeight: 1,
-                            }}
-                            title='Back'
-                        >
-                            {'\u2190'}
-                        </button>
-                    )}
-                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
-                        {getHeaderTitle()}
-                    </h3>
-                </div>
+                <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
+                    {getHeaderTitle()}
+                </h3>
                 <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-                    {!showBackButton && currentUser && (
+                    {currentUser && (
                         <button
                             className='pagerduty-disconnect-link'
                             onClick={handleDisconnect}
@@ -755,7 +727,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             </div>
 
             {/* Tab Bar */}
-            {!showBackButton && !settingsView && (
+            {!settingsView && (
                 <div
                     className='pagerduty-tab-bar'
                     role='tablist'
@@ -796,7 +768,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             )}
 
             {/* Mine / All Filter Toggle */}
-            {!showBackButton && !settingsView && currentUser && (
+            {!settingsView && currentUser && (
                 <div
                     className='pagerduty-filter-toggle'
                     style={{
@@ -892,18 +864,37 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     {/* Schedules Tab */}
                     {activeTab === 'schedules' && (
                         selectedSchedule || loadingDetails ? (
-                            <ScheduleDetails
+                            <>
+                                <button
+                                    onClick={handleBack}
+                                    className='pagerduty-back-link'
+                                    style={{
+                                        backgroundColor: 'transparent',
+                                        color: theme.linkColor,
+                                        border: 'none',
+                                        padding: '0 0 12px 0',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                    }}
+                                >
+                                    {'\u2190 Back to schedules'}
+                                </button>
+                                <ScheduleDetails
                                 schedule={selectedSchedule}
                                 onBack={handleBack}
                                 theme={theme}
                                 loading={loadingDetails}
                                 currentUser={currentUser || undefined}
-                                onOverrideCreated={() => {
-                                    if (selectedSchedule) {
-                                        handleScheduleClick(selectedSchedule.id);
-                                    }
-                                }}
-                            />
+                                    onOverrideCreated={() => {
+                                        if (selectedSchedule) {
+                                            handleScheduleClick(selectedSchedule.id);
+                                        }
+                                    }}
+                                />
+                            </>
                         ) : (
                             <ScheduleList
                                 schedules={filterMode === 'mine' && currentUser ?
@@ -929,6 +920,23 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                                     isInteractingRef.current = false;
                                 }}
                             >
+                                <button
+                                    onClick={handleBack}
+                                    className='pagerduty-back-link'
+                                    style={{
+                                        backgroundColor: 'transparent',
+                                        color: theme.linkColor,
+                                        border: 'none',
+                                        padding: '0 0 12px 0',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                    }}
+                                >
+                                    {'\u2190 Back to incidents'}
+                                </button>
                                 <IncidentDetails
                                     incident={selectedIncident}
                                     onBack={handleBack}
