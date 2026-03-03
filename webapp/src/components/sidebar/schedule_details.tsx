@@ -10,123 +10,6 @@ import client from '@/client/client';
 import type {Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
-interface OverflowActionsProps {
-    theme: Theme;
-    entryKey: string;
-    entryStart: string;
-    entryEnd: string;
-    isOwnShift: boolean;
-    takingShift: string | null;
-    onTakeShift: (start: string, end: string) => void;
-    onOverride: (start: string, end: string) => void;
-}
-
-const OverflowActions: React.FC<OverflowActionsProps> = ({
-    theme, entryKey, entryStart, entryEnd, isOwnShift, takingShift, onTakeShift, onOverride,
-}) => {
-    const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!open) {
-            return undefined;
-        }
-        const handleClickOutside = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) {
-                setOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [open]);
-
-    const btnStyle: React.CSSProperties = {
-        backgroundColor: 'transparent',
-        border: 'none',
-        padding: '4px 8px',
-        fontSize: '11px',
-        cursor: 'pointer',
-        textAlign: 'left' as const,
-        width: '100%',
-        borderRadius: '3px',
-    };
-
-    return (
-        <div
-            ref={ref}
-            style={{position: 'relative', display: 'inline-block', marginTop: '4px'}}
-        >
-            <button
-                className='overflow-menu-trigger'
-                onClick={() => setOpen(!open)}
-                aria-label='More actions'
-                style={{
-                    backgroundColor: 'transparent',
-                    color: theme.centerChannelColor,
-                    opacity: 0.4,
-                    border: 'none',
-                    padding: '0 4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    lineHeight: 1,
-                    letterSpacing: '1px',
-                }}
-            >
-                {'\u22EF'}
-            </button>
-            {open && (
-                <div
-                    className='overflow-menu'
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: '100%',
-                        zIndex: 10,
-                        backgroundColor: theme.centerChannelBg,
-                        border: `1px solid ${theme.centerChannelColor}20`,
-                        borderRadius: '4px',
-                        boxShadow: `0 2px 8px ${theme.centerChannelColor}15`,
-                        padding: '4px',
-                        minWidth: '100px',
-                    }}
-                >
-                    {!isOwnShift && (
-                        <button
-                            className='take-shift-button'
-                            onClick={() => {
-                                onTakeShift(entryStart, entryEnd);
-                                setOpen(false);
-                            }}
-                            disabled={takingShift === entryKey}
-                            style={{
-                                ...btnStyle,
-                                color: theme.centerChannelColor,
-                                fontWeight: 500,
-                            }}
-                        >
-                            {takingShift === entryKey ? 'Taking...' : 'Take shift'}
-                        </button>
-                    )}
-                    <button
-                        className='override-button'
-                        onClick={() => {
-                            onOverride(entryStart, entryEnd);
-                            setOpen(false);
-                        }}
-                        style={{
-                            ...btnStyle,
-                            color: theme.centerChannelColor,
-                            fontWeight: 500,
-                        }}
-                    >
-                        {'Override'}
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
 interface Props {
     schedule: Schedule | null;
     onBack: () => void;
@@ -516,30 +399,32 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                 >
                                     {formatTimeRange(startTime, endTime, now)}
                                 </div>
-                                {/* Action buttons — visible on current shift, overflow for others */}
-                                {!isPastEntry && isCurrentlyOnCall && (
+                                {/* Action buttons */}
+                                {!isPastEntry && (
                                     <div
                                         className='entry-actions'
                                         style={{display: 'flex', gap: '6px', marginTop: '6px'}}
                                     >
-                                        <button
-                                            className='page-button'
-                                            onClick={handlePageSchedule}
-                                            aria-label={`Page ${entry.user.name || entry.user.summary}`}
-                                            style={{
-                                                backgroundColor: theme.dndIndicator || '#d32f2f',
-                                                color: '#ffffff',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                padding: '4px 8px',
-                                                fontSize: '11px',
-                                                fontWeight: 600,
-                                                cursor: 'pointer',
-                                                whiteSpace: 'nowrap' as const,
-                                            }}
-                                        >
-                                            {'Page'}
-                                        </button>
+                                        {isCurrentlyOnCall && (
+                                            <button
+                                                className='page-button'
+                                                onClick={handlePageSchedule}
+                                                aria-label={`Page ${entry.user.name || entry.user.summary}`}
+                                                style={{
+                                                    backgroundColor: theme.dndIndicator || '#d32f2f',
+                                                    color: '#ffffff',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    padding: '4px 8px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap' as const,
+                                                }}
+                                            >
+                                                {'Page'}
+                                            </button>
+                                        )}
                                         {currentUser && entry.user.id !== currentUser.id && (
                                             <button
                                                 className='take-shift-button'
@@ -583,18 +468,6 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                             </button>
                                         )}
                                     </div>
-                                )}
-                                {!isPastEntry && !isCurrentlyOnCall && currentUser && (
-                                    <OverflowActions
-                                        theme={theme}
-                                        entryKey={entryKey}
-                                        entryStart={entry.start}
-                                        entryEnd={entry.end}
-                                        isOwnShift={entry.user.id === currentUser.id}
-                                        takingShift={takingShift}
-                                        onTakeShift={handleTakeShift}
-                                        onOverride={handleOpenOverrideDialog}
-                                    />
                                 )}
                             </div>
                         </div>
