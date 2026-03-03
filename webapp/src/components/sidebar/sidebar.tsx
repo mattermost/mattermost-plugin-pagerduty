@@ -675,17 +675,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             {'\u2190'}
                         </button>
                     )}
-                    <h3
-                        style={{
-                            margin: 0,
-                            color: theme.centerChannelColor,
-                            fontSize: '16px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}
-                        title={!showBackButton && currentUser ? (currentUser.email || currentUser.name) : undefined}
-                    >
+                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
                         {getHeaderTitle()}
                     </h3>
                 </div>
