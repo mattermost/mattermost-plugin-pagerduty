@@ -50,24 +50,25 @@ const groupByUser = (onCalls: OnCall[]): GroupedUser[] => {
 
     for (const oncall of onCalls) {
         const existing = userMap.get(oncall.user.id);
-        const scheduleInfo: ScheduleInfo = {
-            id: oncall.schedule?.id,
-            name: oncall.schedule?.name || 'Unknown Schedule',
+        const scheduleInfo: ScheduleInfo | null = oncall.schedule?.name ? {
+            id: oncall.schedule.id,
+            name: oncall.schedule.name,
             escalationLevel: oncall.escalation_level,
-        };
+        } : null;
 
         if (existing) {
-            // Avoid duplicate schedule entries for the same user
-            const alreadyHas = existing.schedules.some(
-                (s) => s.name === scheduleInfo.name && s.escalationLevel === scheduleInfo.escalationLevel,
-            );
-            if (!alreadyHas) {
-                existing.schedules.push(scheduleInfo);
+            if (scheduleInfo) {
+                const alreadyHas = existing.schedules.some(
+                    (s) => s.name === scheduleInfo.name && s.escalationLevel === scheduleInfo.escalationLevel,
+                );
+                if (!alreadyHas) {
+                    existing.schedules.push(scheduleInfo);
+                }
             }
         } else {
             userMap.set(oncall.user.id, {
                 user: oncall.user,
-                schedules: [scheduleInfo],
+                schedules: scheduleInfo ? [scheduleInfo] : [],
             });
         }
     }

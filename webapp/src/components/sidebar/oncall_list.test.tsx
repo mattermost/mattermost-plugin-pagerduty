@@ -206,7 +206,7 @@ describe('OnCallList', () => {
         );
 
         expect(screen.getByText('John Doe')).toBeInTheDocument();
-        expect(screen.getByText('Unknown Schedule')).toBeInTheDocument();
+        expect(screen.queryByText('Unknown Schedule')).not.toBeInTheDocument();
     });
 
     it('should show fallback avatar when no avatar_url', () => {
