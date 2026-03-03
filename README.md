@@ -9,21 +9,26 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 ## Features
 
 ### Core Functionality
-- **Schedule Browser**: View all PagerDuty schedules in a clean, organized list
+- **Tabbed Navigation**: Three main views — On-Call, Schedules, and Incidents — accessible via sidebar tabs
+- **Schedule Browser**: View all PagerDuty schedules in a clean, organized list with Mine/All filtering
 - **Timeline View**: Click any schedule to see a detailed 48-hour timeline showing:
   - Who's currently on-call (highlighted with special styling)
   - Upcoming shifts with countdown timers
   - Smooth transitions between on-call personnel
+- **Incident Management**: View, acknowledge, resolve, and add notes to incidents directly from Mattermost
 - **Direct Paging**: Page the current on-call person directly from the schedule view
+- **Schedule Overrides**: Create temporary schedule overrides to cover shifts
 - **Right-Hand Sidebar**: Dedicated sidebar accessible via channel header button
-- **Real-time Data**: Always shows current information - no background syncing needed
-- **Secure Configuration**: Per-user OAuth tokens are stored securely and never exposed in the UI
+- **Background Monitoring**: Automatic on-call change detection with configurable notifications
+- **Secure Authentication**: Per-user OAuth tokens with automatic refresh, stored securely and never exposed in the UI
 
 ### User Interface
-- **Intuitive Navigation**: Easy back button to switch between schedule list and details
+- **Tabbed Layout**: On-Call, Schedules, and Incidents tabs for quick access to different views
+- **Mine/All Filter**: Toggle between viewing all schedules or only those where you're on-call
 - **Visual Indicators**: Current on-call person prominently displayed with colored background and badges
 - **Relative Time Display**: Shows human-friendly time format ("2h 30m remaining", "Starts in 1d 4h")
 - **Paging Interface**: One-click paging with incident creation dialog
+- **Settings Panel**: Gear icon to manage notification preferences and channel subscriptions in-sidebar
 - **Responsive Design**: Clean layout that works well in the Mattermost sidebar
 - **Theme Support**: Automatically adapts to your Mattermost theme (light/dark)
 - **Enhanced Styling**: Comprehensive CSS classes for customization
@@ -70,6 +75,8 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
      - `schedules.read`
      - `services.read`
      - `users.read`
+     - `webhook_subscriptions.read` (required for webhook setup)
+     - `webhook_subscriptions.write` (required for webhook setup)
 4. Save the app and copy the **Client ID** and **Client Secret**
 
 ### Step 2: Configure the Mattermost Plugin
@@ -119,11 +126,12 @@ To receive real-time incident notifications from PagerDuty:
 
 ### Viewing Schedules
 
-1. The main view shows all available schedules with:
+1. Select the **Schedules** tab to see all available schedules with:
    - Schedule name
    - Description (if available)
    - Timezone information
-2. Click on any schedule to see detailed on-call information
+2. Use the **Mine/All** toggle to filter to schedules where you're on-call
+3. Click on any schedule to see detailed on-call information
 
 ### Timeline View
 
@@ -142,6 +150,22 @@ The plugin allows you to directly page the current on-call person:
 - **Service Selection**: Choose which PagerDuty service to associate with the incident
 - **Smart Targeting**: Automatically assigns the incident to the current on-call person
 - **Success Feedback**: Visual confirmation when the incident is created
+
+### Incident Management
+
+The Incidents tab shows all triggered and acknowledged incidents:
+- **Incident List**: View all open incidents with status, urgency, service, and assignees
+- **Incident Details**: Click an incident to see full details including description and timeline
+- **Status Actions**: Acknowledge or resolve incidents directly from Mattermost
+- **Incident Notes**: View and add notes to incidents for collaboration
+- **Direct Links**: Click through to PagerDuty for full incident context
+
+### Schedule Overrides
+
+Create temporary schedule overrides from the timeline view:
+- **Quick Override**: Override a shift for a specific time window
+- **User Search**: Search for PagerDuty users to assign the override to
+- **Flexible Duration**: Set custom start and end times for the override
 
 ### Notifications & Subscriptions
 
@@ -196,6 +220,8 @@ You can also manage notification preferences from the sidebar by clicking the **
 
 | Command | Description |
 |---------|-------------|
+| `/pagerduty connect` | Connect your PagerDuty account via OAuth |
+| `/pagerduty disconnect` | Disconnect your PagerDuty account |
 | `/pagerduty subscribe [events] [--service ID]` | Subscribe this channel to PagerDuty events |
 | `/pagerduty unsubscribe` | Unsubscribe this channel |
 | `/pagerduty list` | Show this channel's subscription details |
@@ -205,9 +231,10 @@ You can also manage notification preferences from the sidebar by clicking the **
 
 ### Navigation
 
-- Use the **← back arrow** to return to the schedule list
+- Switch between **On-Call**, **Schedules**, and **Incidents** tabs at the top
+- Use the **Mine/All** toggle to filter schedules to only those where you're on-call
+- Use the **← back arrow** to return from detail views to the list
 - Click **Refresh** to get the latest data
-- Click the same schedule again to refresh its details
 - Click the **gear icon** to access notification preferences and channel subscription settings
 
 ## Development
@@ -253,36 +280,35 @@ make watch
 
 Here's a list of nice-to-have features that could enhance the PagerDuty plugin:
 
-### 📅 Schedule Management
+### Schedule Management
 - **Shift swapping**: Request and approve shift swaps between team members
 - **Multi-schedule view**: View multiple schedules side-by-side for coordination
 - **Calendar export**: Export on-call schedules to iCal/Google Calendar format
 - **Historical view**: View past on-call schedules and coverage
 
-### 🎯 Enhanced Features
+### Enhanced Features
 - **User profiles**: Click on users to see their contact info and current status
-- **Search functionality**: Search for specific users or schedules
 - **Timezone support**: Show schedules in user's local timezone with conversion
 - **Mobile optimization**: Responsive design for mobile Mattermost apps
 
-### 🤖 Automation & Integration
+### Automation & Integration
 - **Incident response**: Create Mattermost channels automatically for PagerDuty incidents
 - **Status sync**: Sync on-call status to Mattermost user status
 - **Escalation policies**: View and understand escalation policies
 - **Service dependencies**: Visualize service dependencies and their on-call teams
 
-### 📊 Analytics & Reporting
+### Analytics & Reporting
 - **On-call metrics**: Time spent on-call, incident load per person
 - **Coverage reports**: Identify gaps in on-call coverage
 - **Rotation fairness**: Ensure equal distribution of on-call duties
 - **Custom dashboards**: Build team-specific on-call dashboards
 
-### 🔧 Administrative Features
+### Administrative Features
 - **Bulk configuration**: Configure multiple schedules at once
 - **Role-based access**: Restrict who can view certain schedules
 - **Audit logging**: Track who viewed or modified schedule information
 
-### 🎨 User Experience
+### User Experience
 - **Customizable views**: Save preferred schedule views and filters
 - **Keyboard shortcuts**: Navigate schedules quickly with keyboard commands
 - **Rich schedule details**: Show more context like team descriptions, runbooks
