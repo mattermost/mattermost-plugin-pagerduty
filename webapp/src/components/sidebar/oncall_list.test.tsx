@@ -188,7 +188,7 @@ describe('OnCallList', () => {
         expect(avatars[1]).toHaveAttribute('src', 'https://example.com/avatar2.png');
     });
 
-    it('should handle on-calls without schedule info', () => {
+    it('should hide users on unknown schedules', () => {
         const onCallsWithoutSchedule = [
             {
                 ...mockOnCalls[0],
@@ -205,8 +205,8 @@ describe('OnCallList', () => {
             />,
         );
 
-        expect(screen.getByText('John Doe')).toBeInTheDocument();
-        expect(screen.queryByText('Unknown Schedule')).not.toBeInTheDocument();
+        // User should be hidden entirely when they have no named schedule
+        expect(screen.queryByText('John Doe')).not.toBeInTheDocument();
     });
 
     it('should show fallback avatar when no avatar_url', () => {

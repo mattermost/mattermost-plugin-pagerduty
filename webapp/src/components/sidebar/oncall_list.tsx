@@ -49,26 +49,29 @@ const groupByUser = (onCalls: OnCall[]): GroupedUser[] => {
     const userMap = new Map<string, GroupedUser>();
 
     for (const oncall of onCalls) {
+        // Skip entries without a named schedule — they are non-actionable
+        if (!oncall.schedule?.name) {
+            continue;
+        }
+
         const existing = userMap.get(oncall.user.id);
-        const scheduleInfo: ScheduleInfo | null = oncall.schedule?.name ? {
+        const scheduleInfo: ScheduleInfo = {
             id: oncall.schedule.id,
             name: oncall.schedule.name,
             escalationLevel: oncall.escalation_level,
-        } : null;
+        };
 
         if (existing) {
-            if (scheduleInfo) {
-                const alreadyHas = existing.schedules.some(
-                    (s) => s.name === scheduleInfo.name && s.escalationLevel === scheduleInfo.escalationLevel,
-                );
-                if (!alreadyHas) {
-                    existing.schedules.push(scheduleInfo);
-                }
+            const alreadyHas = existing.schedules.some(
+                (s) => s.name === scheduleInfo.name && s.escalationLevel === scheduleInfo.escalationLevel,
+            );
+            if (!alreadyHas) {
+                existing.schedules.push(scheduleInfo);
             }
         } else {
             userMap.set(oncall.user.id, {
                 user: oncall.user,
-                schedules: scheduleInfo ? [scheduleInfo] : [],
+                schedules: [scheduleInfo],
             });
         }
     }
