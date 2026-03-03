@@ -167,7 +167,7 @@ describe('PagerDutySidebar', () => {
         );
     });
 
-    it('should show user info row with disconnect link when connected', async () => {
+    it('should show user name in header with disconnect link when connected', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
         mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User', email: 'test@example.com'}});

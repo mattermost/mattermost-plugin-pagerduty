@@ -497,7 +497,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         if (selectedIncident) {
             return 'Incident Details';
         }
-        return 'PagerDuty';
+        return currentUser?.name || 'PagerDuty';
     };
 
     const showBackButton = selectedSchedule !== null || selectedIncident !== null;
@@ -675,11 +675,39 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             {'\u2190'}
                         </button>
                     )}
-                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
+                    <h3
+                        style={{
+                            margin: 0,
+                            color: theme.centerChannelColor,
+                            fontSize: '16px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                        }}
+                        title={!showBackButton && currentUser ? (currentUser.email || currentUser.name) : undefined}
+                    >
                         {getHeaderTitle()}
                     </h3>
                 </div>
                 <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                    {!showBackButton && currentUser && (
+                        <button
+                            className='pagerduty-disconnect-link'
+                            onClick={handleDisconnect}
+                            style={{
+                                backgroundColor: 'transparent',
+                                color: theme.linkColor,
+                                border: 'none',
+                                padding: '0 8px 0 0',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                fontWeight: 400,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {'Disconnect'}
+                        </button>
+                    )}
                     <button
                         onClick={handleRefresh}
                         aria-label='Refresh data'
@@ -735,53 +763,6 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     </button>
                 </div>
             </div>
-
-            {/* User Info Row */}
-            {currentUser && (
-                <div
-                    className='pagerduty-user-info'
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '8px 16px',
-                        borderBottom: `1px solid ${theme.centerChannelColor}20`,
-                        backgroundColor: `${theme.centerChannelColor}05`,
-                    }}
-                >
-                    <span
-                        style={{
-                            color: theme.centerChannelColor,
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            marginRight: '8px',
-                        }}
-                        title={currentUser.email || currentUser.name}
-                    >
-                        {currentUser.name}
-                    </span>
-                    <button
-                        className='pagerduty-disconnect-link'
-                        onClick={handleDisconnect}
-                        style={{
-                            backgroundColor: 'transparent',
-                            color: theme.linkColor,
-                            border: 'none',
-                            padding: '0',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            fontWeight: 400,
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0,
-                        }}
-                    >
-                        {'Disconnect'}
-                    </button>
-                </div>
-            )}
 
             {/* Tab Bar */}
             {!showBackButton && !settingsView && (
