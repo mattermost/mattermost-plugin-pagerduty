@@ -93,6 +93,20 @@ jest.mock('./incident_details', () => ({
     ),
 }));
 
+jest.mock('./notification_settings', () => ({
+    __esModule: true,
+    default: ({onBack}: any) => (
+        <div data-testid='notification-settings'>
+            <button onClick={onBack}>{'Back'}</button>
+        </div>
+    ),
+}));
+
+jest.mock('./subscription_manager', () => ({
+    __esModule: true,
+    default: () => <div data-testid='subscription-manager'/>,
+}));
+
 jest.mock('./paging_dialog', () => ({
     PagingDialog: () => <div data-testid='paging-dialog'/>,
 }));
@@ -153,31 +167,42 @@ describe('PagerDutySidebar', () => {
         );
     });
 
-    it('should show disconnect button when connected', async () => {
+    it('should show user name in header with disconnect link when connected', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
-        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User'}});
+        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User', email: 'test@example.com'}});
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
-        await waitFor(() => {
-            expect(screen.getByRole('button', {name: 'Disconnect PagerDuty account'})).toBeInTheDocument();
+        // Flush multi-step async chain: connection check → re-render → getCurrentUser effect
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
         });
+
+        expect(screen.getByText('Test User')).toBeInTheDocument();
+        expect(screen.getByText('Disconnect')).toBeInTheDocument();
     });
 
     it('should disconnect and show connect screen', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
-        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User'}});
+        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User', email: 'test@example.com'}});
         mockClient.disconnect.mockResolvedValueOnce(undefined);
 
         render(<PagerDutySidebar theme={mockTheme}/>);
 
-        await waitFor(() => {
-            expect(screen.getByRole('button', {name: 'Disconnect PagerDuty account'})).toBeInTheDocument();
+        // Flush multi-step async chain: connection check → re-render → getCurrentUser effect
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
         });
 
-        fireEvent.click(screen.getByRole('button', {name: 'Disconnect PagerDuty account'}));
+        fireEvent.click(screen.getByText('Disconnect'));
 
         await waitFor(() => {
             expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
@@ -327,7 +352,7 @@ describe('PagerDutySidebar', () => {
         expect(screen.getByText('Error: API Error')).toBeInTheDocument();
     });
 
-    it('should show back button when in detail view and hide tabs', async () => {
+    it('should show inline back link in detail view and keep tabs visible', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
         mockClient.getOnCalls.mockResolvedValueOnce({oncalls: [
             {user: {id: 'U1', name: 'Test User'}, schedule: {id: 'SCHED1', name: 'Primary'}, escalation_level: 1},
@@ -357,8 +382,32 @@ describe('PagerDutySidebar', () => {
             expect(screen.getByTestId('schedule-details')).toBeInTheDocument();
         });
 
-        // Back button should be visible, tabs should be hidden
-        expect(screen.getByTitle('Back')).toBeInTheDocument();
-        expect(screen.queryByTestId('tab-oncall')).not.toBeInTheDocument();
+        // Inline back link should be visible, tabs should remain visible
+        expect(screen.getByText('\u2190 Back to schedules')).toBeInTheDocument();
+        expect(screen.getByTestId('tab-oncall')).toBeInTheDocument();
+    });
+
+    it('should hide tab bar when settings view is active', async () => {
+        mockClient.getConnectionStatus.mockResolvedValueOnce({connected: true});
+        mockClient.getOnCalls.mockResolvedValueOnce({oncalls: []});
+        mockClient.getCurrentUser.mockResolvedValueOnce({user: {id: 'U1', name: 'Test User', email: 'test@example.com'}});
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        // Wait for initial render with tabs visible
+        await waitFor(() => {
+            expect(screen.getByTestId('tab-oncall')).toBeInTheDocument();
+        });
+
+        // Click settings gear
+        fireEvent.click(screen.getByLabelText('Settings'));
+
+        // Tabs should be hidden, settings should be visible
+        await waitFor(() => {
+            expect(screen.queryByTestId('tab-oncall')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('tab-schedules')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('tab-incidents')).not.toBeInTheDocument();
+            expect(screen.getByTestId('notification-settings')).toBeInTheDocument();
+        });
     });
 });

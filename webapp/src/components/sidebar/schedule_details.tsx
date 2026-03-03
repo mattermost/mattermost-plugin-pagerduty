@@ -86,6 +86,38 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         return 'Completed';
     };
 
+    const formatSmartDate = (date: Date, now: Date): string => {
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const time = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+        if (diffDays === 0) {
+            return `Today ${time}`;
+        }
+        if (diffDays === 1) {
+            return `Tomorrow ${time}`;
+        }
+        if (diffDays === -1) {
+            return `Yesterday ${time}`;
+        }
+        return `${date.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})} ${time}`;
+    };
+
+    const formatTimeRange = (startTime: Date, endTime: Date, now: Date): string => {
+        const startDay = new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate());
+        const endDay = new Date(endTime.getFullYear(), endTime.getMonth(), endTime.getDate());
+        const sameDay = startDay.getTime() === endDay.getTime();
+
+        if (sameDay) {
+            const startStr = formatSmartDate(startTime, now);
+            const endTime2 = endTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            return `${startStr} \u2013 ${endTime2}`;
+        }
+
+        return `${formatSmartDate(startTime, now)} \u2013 ${formatSmartDate(endTime, now)}`;
+    };
+
     const handlePageSchedule = () => {
         const currentOnCallUser = getCurrentOnCallUser();
         if (currentOnCallUser) {
@@ -196,7 +228,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     return (
         <div
             className='schedule-details-container'
-            style={{padding: '20px'}}
+            data-testid='schedule-details'
         >
             {successMessage && (
                 <div
@@ -207,8 +239,8 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                         color: 'white',
                         padding: '8px 12px',
                         borderRadius: '4px',
-                        marginBottom: '16px',
-                        fontSize: '14px',
+                        marginBottom: '12px',
+                        fontSize: '13px',
                     }}
                 >
                     {successMessage}
@@ -223,144 +255,155 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                         color: theme.errorTextColor || '#d32f2f',
                         padding: '8px 12px',
                         borderRadius: '4px',
-                        marginBottom: '16px',
-                        fontSize: '14px',
+                        marginBottom: '12px',
+                        fontSize: '13px',
                     }}
                 >
                     {error}
                 </div>
             )}
 
-            <div
-                className='schedule-entries-section'
-                style={{marginBottom: '20px'}}
+            <h4
+                className='schedule-section-title'
+                style={{
+                    color: theme.centerChannelColor,
+                    margin: '0 0 12px 0',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                }}
             >
-                <h4
-                    className='schedule-section-title'
-                    style={{color: theme.centerChannelColor, marginBottom: '16px', fontSize: '16px', fontWeight: 600}}
+                {schedule.name}
+            </h4>
+
+            {!schedule.final_schedule && (
+                <div
+                    className='no-schedule-message'
+                    style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '13px'}}
                 >
-                    {'On-Call Schedule'}
-                </h4>
+                    {'No on-call schedule available'}
+                </div>
+            )}
 
-                {!schedule.final_schedule && (
-                    <div
-                        className='no-schedule-message'
-                        style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}
-                    >
-                        {'No on-call schedule available'}
-                    </div>
-                )}
+            {schedule.final_schedule && entries.length === 0 && (
+                <div
+                    className='no-entries-message'
+                    style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '13px'}}
+                >
+                    {'No on-call entries for this schedule'}
+                </div>
+            )}
 
-                {schedule.final_schedule && entries.length === 0 && (
-                    <div
-                        className='no-entries-message'
-                        style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}
-                    >
-                        {'No on-call entries for this schedule'}
-                    </div>
-                )}
+            {entries.map((entry, index) => {
+                const now = new Date();
+                const startTime = new Date(entry.start);
+                const endTime = new Date(entry.end);
+                const isCurrentlyOnCall = now >= startTime && now <= endTime;
+                const isPastEntry = now > endTime;
+                const entryKey = `${entry.start}-${entry.end}`;
 
-                {entries.map((entry, index) => {
-                    const now = new Date();
-                    const startTime = new Date(entry.start);
-                    const endTime = new Date(entry.end);
-                    const isCurrentlyOnCall = now >= startTime && now <= endTime;
-                    const isPastEntry = now > endTime;
+                // Add section divider for first future entry after current/past entries
+                const prevEntry = index > 0 ? entries[index - 1] : null;
+                const prevEndTime = prevEntry ? new Date(prevEntry.end) : null;
+                const showUpcomingDivider = !isCurrentlyOnCall && !isPastEntry &&
+                    (!prevEndTime || now > prevEndTime || (now >= new Date(prevEntry!.start) && now <= prevEndTime));
 
-                    // Add section divider for first future entry after current/past entries
-                    const prevEntry = index > 0 ? entries[index - 1] : null;
-                    const prevEndTime = prevEntry ? new Date(prevEntry.end) : null;
-                    const showUpcomingDivider = !isCurrentlyOnCall && !isPastEntry &&
-                        (!prevEndTime || now > prevEndTime || (now >= new Date(prevEntry!.start) && now <= prevEndTime));
-
-                    return (
-                        <React.Fragment key={`${entry.user.id}-${entry.start}-${index}`}>
-                            {showUpcomingDivider && (
-                                <div
-                                    className='upcoming-shifts-divider'
-                                    style={{
-                                        borderTop: `1px solid ${theme.centerChannelColor}30`,
-                                        marginTop: '16px',
-                                        marginBottom: '16px',
-                                        paddingTop: '12px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                        color: theme.centerChannelColor,
-                                        opacity: 0.7,
-                                        textTransform: 'uppercase' as const,
-                                        letterSpacing: '0.5px',
-                                    }}
-                                >
-                                    {'Upcoming Shifts'}
-                                </div>
-                            )}
+                return (
+                    <React.Fragment key={`${entry.user.id}-${entry.start}-${index}`}>
+                        {showUpcomingDivider && (
                             <div
-                                className={`schedule-entry ${isCurrentlyOnCall ? 'current-oncall' : ''} ${isPastEntry ? 'past-entry' : ''}`}
-                                data-testid={`schedule-entry-${index}`}
+                                className='upcoming-shifts-divider'
                                 style={{
-                                    padding: '16px',
-                                    backgroundColor: isCurrentlyOnCall ? theme.onlineIndicator + '15' : theme.centerChannelBg,
-                                    border: `2px solid ${isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor + '20'}`,
-                                    borderRadius: '8px',
-                                    marginBottom: '12px',
-                                    boxShadow: isCurrentlyOnCall ? `0 2px 8px ${theme.onlineIndicator}30` : 'none',
-                                    position: 'relative' as const,
-                                    opacity: isPastEntry ? 0.6 : 1,
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: theme.centerChannelColor,
+                                    opacity: 0.5,
+                                    textTransform: 'uppercase' as const,
+                                    letterSpacing: '0.5px',
+                                    padding: '8px 0 4px 0',
                                 }}
                             >
-                                <div style={{display: 'flex', alignItems: 'center'}}>
-                                    {entry.user.avatar_url && (
-                                        <img
-                                            className='user-avatar'
-                                            src={entry.user.avatar_url}
-                                            alt={entry.user.name}
-                                            style={{
-                                                width: '32px',
-                                                height: '32px',
-                                                borderRadius: '50%',
-                                                marginRight: '12px',
-                                            }}
-                                        />
-                                    )}
-                                    <div
-                                        className='user-info'
-                                        style={{flex: 1, minWidth: 0}}
+                                {'Upcoming'}
+                            </div>
+                        )}
+                        <div
+                            className={`schedule-entry ${isCurrentlyOnCall ? 'current-oncall' : ''} ${isPastEntry ? 'past-entry' : ''}`}
+                            data-testid={`schedule-entry-${index}`}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                padding: '10px 0',
+                                borderBottom: `1px solid ${theme.centerChannelColor}10`,
+                                borderLeft: isCurrentlyOnCall ? `3px solid ${theme.onlineIndicator}` : '3px solid transparent',
+                                paddingLeft: '10px',
+                                backgroundColor: isCurrentlyOnCall ? theme.onlineIndicator + '08' : 'transparent',
+                                opacity: isPastEntry ? 0.5 : 1,
+                            }}
+                        >
+                            {entry.user.avatar_url && (
+                                <img
+                                    className='user-avatar'
+                                    src={entry.user.avatar_url}
+                                    alt={entry.user.name}
+                                    style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        marginRight: '10px',
+                                        marginTop: '1px',
+                                        flexShrink: 0,
+                                    }}
+                                />
+                            )}
+                            <div
+                                className='user-info'
+                                style={{flex: 1, minWidth: 0}}
+                            >
+                                <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between'}}>
+                                    <span
+                                        className='user-name'
+                                        style={{
+                                            fontWeight: 500,
+                                            color: theme.centerChannelColor,
+                                            fontSize: '13px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                        title={entry.user.email || entry.user.name}
                                     >
-                                        <div
-                                            className='user-name'
-                                            style={{fontWeight: 500, color: theme.centerChannelColor, fontSize: '14px'}}
-                                        >
-                                            {entry.user.name || entry.user.summary}
-                                        </div>
-                                        {entry.user.email && (
-                                            <div
-                                                className='user-email'
-                                                style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7}}
-                                            >
-                                                {entry.user.email}
-                                            </div>
-                                        )}
-                                        <div className='time-info'>
-                                            <div
-                                                className='relative-time'
-                                                style={{fontSize: '12px', color: isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor, fontWeight: isCurrentlyOnCall ? 600 : 400}}
-                                            >
-                                                {formatRelativeTime(startTime, endTime, now)}
-                                            </div>
-                                            <div
-                                                className='absolute-time'
-                                                style={{fontSize: '11px', color: theme.centerChannelColor, opacity: 0.5, marginTop: '2px'}}
-                                            >
-                                                {`${startTime.toLocaleDateString()} ${startTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - ${endTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`}
-                                            </div>
-                                        </div>
-                                    </div>
+                                        {entry.user.name || entry.user.summary}
+                                    </span>
+                                    <span
+                                        className='relative-time'
+                                        style={{
+                                            fontSize: '12px',
+                                            color: isCurrentlyOnCall ? theme.onlineIndicator : theme.centerChannelColor,
+                                            fontWeight: isCurrentlyOnCall ? 600 : 400,
+                                            opacity: isCurrentlyOnCall ? 1 : 0.6,
+                                            whiteSpace: 'nowrap',
+                                            marginLeft: '8px',
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        {formatRelativeTime(startTime, endTime, now)}
+                                    </span>
+                                </div>
+                                <div
+                                    className='absolute-time'
+                                    style={{
+                                        fontSize: '12px',
+                                        color: theme.centerChannelColor,
+                                        opacity: 0.5,
+                                        marginTop: '2px',
+                                    }}
+                                >
+                                    {formatTimeRange(startTime, endTime, now)}
                                 </div>
                                 {/* Action buttons */}
                                 {!isPastEntry && (
                                     <div
                                         className='entry-actions'
-                                        style={{display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '10px'}}
+                                        style={{display: 'flex', gap: '6px', marginTop: '6px'}}
                                     >
                                         {isCurrentlyOnCall && (
                                             <button
@@ -372,36 +415,36 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                                     color: '#ffffff',
                                                     border: 'none',
                                                     borderRadius: '4px',
-                                                    padding: '5px 10px',
+                                                    padding: '4px 8px',
                                                     fontSize: '11px',
                                                     fontWeight: 600,
                                                     cursor: 'pointer',
                                                     whiteSpace: 'nowrap' as const,
                                                 }}
                                             >
-                                                {'Page Now'}
+                                                {'Page'}
                                             </button>
                                         )}
                                         {currentUser && entry.user.id !== currentUser.id && (
                                             <button
                                                 className='take-shift-button'
                                                 onClick={() => handleTakeShift(entry.start, entry.end)}
-                                                disabled={takingShift === `${entry.start}-${entry.end}`}
+                                                disabled={takingShift === entryKey}
                                                 aria-label='Take this shift'
                                                 style={{
                                                     backgroundColor: theme.buttonBg,
                                                     color: theme.buttonColor,
                                                     border: 'none',
                                                     borderRadius: '4px',
-                                                    padding: '5px 10px',
+                                                    padding: '4px 8px',
                                                     fontSize: '11px',
                                                     fontWeight: 600,
-                                                    cursor: takingShift === `${entry.start}-${entry.end}` ? 'not-allowed' : 'pointer',
-                                                    opacity: takingShift === `${entry.start}-${entry.end}` ? 0.6 : 1,
+                                                    cursor: takingShift === entryKey ? 'not-allowed' : 'pointer',
+                                                    opacity: takingShift === entryKey ? 0.6 : 1,
                                                     whiteSpace: 'nowrap' as const,
                                                 }}
                                             >
-                                                {takingShift === `${entry.start}-${entry.end}` ? 'Taking...' : 'Take'}
+                                                {takingShift === entryKey ? 'Taking...' : 'Take'}
                                             </button>
                                         )}
                                         {currentUser && (
@@ -412,9 +455,9 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                                 style={{
                                                     backgroundColor: 'transparent',
                                                     color: theme.linkColor,
-                                                    border: `1px solid ${theme.linkColor}50`,
+                                                    border: `1px solid ${theme.linkColor}40`,
                                                     borderRadius: '4px',
-                                                    padding: '5px 10px',
+                                                    padding: '4px 8px',
                                                     fontSize: '11px',
                                                     fontWeight: 500,
                                                     cursor: 'pointer',
@@ -427,10 +470,10 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                                     </div>
                                 )}
                             </div>
-                        </React.Fragment>
-                    );
-                })}
-            </div>
+                        </div>
+                    </React.Fragment>
+                );
+            })}
 
             {showPagingDialog && pagingTarget && (
                 <div className='paging-dialog-container'>

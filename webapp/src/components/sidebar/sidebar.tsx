@@ -151,6 +151,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         setIncidents([]);
         setIncidentFilters({});
         setLastRefreshed(null);
+        setSettingsView(null);
         try {
             await client.disconnect();
         } catch (err) {
@@ -490,16 +491,8 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
 
     // Determine header title
     const getHeaderTitle = (): string => {
-        if (selectedSchedule) {
-            return selectedSchedule.name || 'Schedule Details';
-        }
-        if (selectedIncident) {
-            return 'Incident Details';
-        }
-        return 'PagerDuty';
+        return currentUser?.name || 'PagerDuty';
     };
-
-    const showBackButton = selectedSchedule !== null || selectedIncident !== null;
 
     const tabs: Array<{key: TabName; label: string}> = [
         {key: 'oncall', label: 'On-Call'},
@@ -655,30 +648,28 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     alignItems: 'center',
                 }}
             >
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                    {showBackButton && (
+                <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
+                    {getHeaderTitle()}
+                </h3>
+                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                    {currentUser && (
                         <button
-                            onClick={handleBack}
-                            aria-label='Go back'
+                            className='pagerduty-disconnect-link'
+                            onClick={handleDisconnect}
                             style={{
                                 backgroundColor: 'transparent',
                                 color: theme.linkColor,
                                 border: 'none',
-                                padding: '4px',
+                                padding: '0 8px 0 0',
                                 cursor: 'pointer',
-                                fontSize: '18px',
-                                lineHeight: 1,
+                                fontSize: '13px',
+                                fontWeight: 400,
+                                whiteSpace: 'nowrap',
                             }}
-                            title='Back'
                         >
-                            {'\u2190'}
+                            {'Disconnect'}
                         </button>
                     )}
-                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
-                        {getHeaderTitle()}
-                    </h3>
-                </div>
-                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
                     <button
                         onClick={handleRefresh}
                         aria-label='Refresh data'
@@ -732,38 +723,11 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                             <path d='M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z'/>
                         </svg>
                     </button>
-                    <button
-                        className='pagerduty-disconnect-button'
-                        onClick={handleDisconnect}
-                        aria-label='Disconnect PagerDuty account'
-                        title='Disconnect PagerDuty'
-                        style={{
-                            backgroundColor: 'transparent',
-                            color: theme.centerChannelColor,
-                            opacity: 0.4,
-                            border: 'none',
-                            padding: '4px 6px',
-                            cursor: 'pointer',
-                            lineHeight: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                        }}
-                    >
-                        <svg
-                            width='14'
-                            height='14'
-                            viewBox='0 0 24 24'
-                            fill='currentColor'
-                            aria-hidden='true'
-                        >
-                            <path d='M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z'/>
-                        </svg>
-                    </button>
                 </div>
             </div>
 
             {/* Tab Bar */}
-            {!showBackButton && (
+            {!settingsView && (
                 <div
                     className='pagerduty-tab-bar'
                     role='tablist'
@@ -804,7 +768,7 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             )}
 
             {/* Mine / All Filter Toggle */}
-            {!showBackButton && currentUser && (
+            {!settingsView && currentUser && (
                 <div
                     className='pagerduty-filter-toggle'
                     style={{
@@ -852,115 +816,158 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 </div>
             )}
 
+            {/* Settings Views (full-area, replaces tabs) */}
+            {settingsView && (
+                <div
+                    className='pagerduty-settings-panel'
+                    style={{flex: 1, overflow: 'auto', padding: '16px'}}
+                >
+                    {settingsView === 'notifications' && (
+                        <NotificationSettings
+                            theme={theme}
+                            onBack={() => setSettingsView(null)}
+                            onOpenSubscriptions={() => setSettingsView('subscriptions')}
+                        />
+                    )}
+                    {settingsView === 'subscriptions' && (
+                        <SubscriptionManager
+                            theme={theme}
+                            channelId={getCurrentChannelId()}
+                            onBack={() => setSettingsView('notifications')}
+                        />
+                    )}
+                </div>
+            )}
+
             {/* Tab Content */}
-            <div
-                id={`tabpanel-${activeTab}`}
-                role='tabpanel'
-                aria-labelledby={`tab-${activeTab}`}
-                style={{flex: 1, overflow: 'auto', padding: '16px'}}
-            >
-                {/* Settings Views */}
-                {settingsView === 'notifications' && (
-                    <NotificationSettings
-                        theme={theme}
-                        onBack={() => setSettingsView(null)}
-                        onOpenSubscriptions={() => setSettingsView('subscriptions')}
-                    />
-                )}
+            {!settingsView && (
+                <div
+                    id={`tabpanel-${activeTab}`}
+                    role='tabpanel'
+                    aria-labelledby={`tab-${activeTab}`}
+                    style={{flex: 1, overflow: 'auto', padding: '16px'}}
+                >
+                    {/* On-Call Tab */}
+                    {activeTab === 'oncall' && (
+                        <OnCallList
+                            onCalls={filterMode === 'mine' && currentUser ?
+                                onCalls.filter((oc) => oc.user?.id === currentUser.id) :
+                                onCalls}
+                            theme={theme}
+                            loading={loading}
+                            error={error}
+                            onPageUser={handlePageUser}
+                            onScheduleClick={(scheduleId: string) => {
+                                setActiveTab('schedules');
+                                handleScheduleClick(scheduleId);
+                            }}
+                            onRetry={handleRetry}
+                        />
+                    )}
 
-                {settingsView === 'subscriptions' && (
-                    <SubscriptionManager
-                        theme={theme}
-                        channelId={getCurrentChannelId()}
-                        onBack={() => setSettingsView('notifications')}
-                    />
-                )}
-
-                {/* Normal Tab Content (hidden when settings view is active) */}
-                {!settingsView && (
-                    <>
-                        {/* On-Call Tab */}
-                        {activeTab === 'oncall' && (
-                            <OnCallList
-                                onCalls={filterMode === 'mine' && currentUser ?
-                                    onCalls.filter((oc) => oc.user?.id === currentUser.id) :
-                                    onCalls}
-                                theme={theme}
-                                loading={loading}
-                                error={error}
-                                onPageUser={handlePageUser}
-                                onRetry={handleRetry}
-                            />
-                        )}
-
-                        {/* Schedules Tab */}
-                        {activeTab === 'schedules' && (
-                            selectedSchedule || loadingDetails ? (
+                    {/* Schedules Tab */}
+                    {activeTab === 'schedules' && (
+                        selectedSchedule || loadingDetails ? (
+                            <>
+                                <button
+                                    onClick={handleBack}
+                                    className='pagerduty-back-link'
+                                    style={{
+                                        backgroundColor: 'transparent',
+                                        color: theme.linkColor,
+                                        border: 'none',
+                                        padding: '0 0 12px 0',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                    }}
+                                >
+                                    {'\u2190 Back to schedules'}
+                                </button>
                                 <ScheduleDetails
-                                    schedule={selectedSchedule}
-                                    onBack={handleBack}
-                                    theme={theme}
-                                    loading={loadingDetails}
-                                    currentUser={currentUser || undefined}
+                                schedule={selectedSchedule}
+                                onBack={handleBack}
+                                theme={theme}
+                                loading={loadingDetails}
+                                currentUser={currentUser || undefined}
                                     onOverrideCreated={() => {
                                         if (selectedSchedule) {
                                             handleScheduleClick(selectedSchedule.id);
                                         }
                                     }}
                                 />
-                            ) : (
-                                <ScheduleList
-                                    schedules={filterMode === 'mine' && currentUser ?
-                                        schedules.filter((s) => myScheduleIds.has(s.id)) :
-                                        schedules}
-                                    onScheduleClick={handleScheduleClick}
-                                    theme={theme}
-                                    loading={loading}
-                                    error={error}
-                                    onRetry={handleRetry}
-                                />
-                            )
-                        )}
+                            </>
+                        ) : (
+                            <ScheduleList
+                                schedules={filterMode === 'mine' && currentUser ?
+                                    schedules.filter((s) => myScheduleIds.has(s.id)) :
+                                    schedules}
+                                onScheduleClick={handleScheduleClick}
+                                theme={theme}
+                                loading={loading}
+                                error={error}
+                                onRetry={handleRetry}
+                            />
+                        )
+                    )}
 
-                        {/* Incidents Tab */}
-                        {activeTab === 'incidents' && (
-                            selectedIncident ? (
-                                <div
-                                    onFocus={() => {
-                                        isInteractingRef.current = true;
-                                    }}
-                                    onBlur={() => {
-                                        isInteractingRef.current = false;
+                    {/* Incidents Tab */}
+                    {activeTab === 'incidents' && (
+                        selectedIncident ? (
+                            <div
+                                onFocus={() => {
+                                    isInteractingRef.current = true;
+                                }}
+                                onBlur={() => {
+                                    isInteractingRef.current = false;
+                                }}
+                            >
+                                <button
+                                    onClick={handleBack}
+                                    className='pagerduty-back-link'
+                                    style={{
+                                        backgroundColor: 'transparent',
+                                        color: theme.linkColor,
+                                        border: 'none',
+                                        padding: '0 0 12px 0',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
                                     }}
                                 >
-                                    <IncidentDetails
-                                        incident={selectedIncident}
-                                        onBack={handleBack}
-                                        theme={theme}
-                                        onIncidentUpdated={handleIncidentUpdated}
-                                    />
-                                </div>
-                            ) : (
-                                <IncidentList
-                                    incidents={incidents}
+                                    {'\u2190 Back to incidents'}
+                                </button>
+                                <IncidentDetails
+                                    incident={selectedIncident}
+                                    onBack={handleBack}
                                     theme={theme}
-                                    loading={loading}
-                                    error={error}
-                                    onIncidentClick={handleIncidentClick}
-                                    onAcknowledge={handleAcknowledge}
-                                    onResolve={handleResolve}
-                                    schedules={filterSchedules}
-                                    users={filterUsers}
-                                    filters={incidentFilters}
-                                    onFiltersChange={handleIncidentFiltersChange}
-                                    userScheduleMap={userScheduleMap}
-                                    onRetry={handleRetry}
+                                    onIncidentUpdated={handleIncidentUpdated}
                                 />
-                            )
-                        )}
-                    </>
-                )}
-            </div>
+                            </div>
+                        ) : (
+                            <IncidentList
+                                incidents={incidents}
+                                theme={theme}
+                                loading={loading}
+                                error={error}
+                                onIncidentClick={handleIncidentClick}
+                                onAcknowledge={handleAcknowledge}
+                                onResolve={handleResolve}
+                                schedules={filterSchedules}
+                                users={filterUsers}
+                                filters={incidentFilters}
+                                onFiltersChange={handleIncidentFiltersChange}
+                                userScheduleMap={userScheduleMap}
+                                onRetry={handleRetry}
+                            />
+                        )
+                    )}
+                </div>
+            )}
 
             {/* Paging Dialog */}
             {showPagingDialog && pagingTarget && (
