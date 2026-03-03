@@ -15,6 +15,11 @@ interface Props {
     onRetry?: () => void;
 }
 
+interface GroupedUser {
+    user: User;
+    schedules: Array<{name: string; escalationLevel: number}>;
+}
+
 const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
     <div aria-busy='true'>
         {[1, 2, 3].map((i) => (
@@ -22,9 +27,9 @@ const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
                 key={i}
                 className='skeleton-item'
                 style={{
-                    height: '56px',
+                    height: '44px',
                     borderRadius: '4px',
-                    marginBottom: '8px',
+                    marginBottom: '4px',
                     backgroundColor: theme.centerChannelColor + '10',
                     animation: 'pagerduty-skeleton-pulse 1.5s ease-in-out infinite',
                 }}
@@ -32,6 +37,35 @@ const LoadingSkeleton: React.FC<{theme: Theme}> = ({theme}) => (
         ))}
     </div>
 );
+
+const groupByUser = (onCalls: OnCall[]): GroupedUser[] => {
+    const userMap = new Map<string, GroupedUser>();
+
+    for (const oncall of onCalls) {
+        const existing = userMap.get(oncall.user.id);
+        const scheduleInfo = {
+            name: oncall.schedule?.name || 'Unknown Schedule',
+            escalationLevel: oncall.escalation_level,
+        };
+
+        if (existing) {
+            // Avoid duplicate schedule entries for the same user
+            const alreadyHas = existing.schedules.some(
+                (s) => s.name === scheduleInfo.name && s.escalationLevel === scheduleInfo.escalationLevel,
+            );
+            if (!alreadyHas) {
+                existing.schedules.push(scheduleInfo);
+            }
+        } else {
+            userMap.set(oncall.user.id, {
+                user: oncall.user,
+                schedules: [scheduleInfo],
+            });
+        }
+    }
+
+    return Array.from(userMap.values());
+};
 
 const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser, onRetry}) => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -79,45 +113,27 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
         );
     }
 
-    // Group on-calls by schedule
-    const oncallsBySchedule = onCalls.reduce((acc, oncall) => {
-        const scheduleName = oncall.schedule?.name || 'Unknown Schedule';
-        if (!acc[scheduleName]) {
-            acc[scheduleName] = [];
-        }
-        acc[scheduleName].push(oncall);
-        return acc;
-    }, {} as Record<string, OnCall[]>);
+    const groupedUsers = groupByUser(onCalls);
 
     // Filter by search query
-    const filteredEntries = Object.entries(oncallsBySchedule).filter(([scheduleName, scheduleOncalls]) => {
+    const filteredUsers = groupedUsers.filter((entry) => {
         if (!searchQuery) {
             return true;
         }
         const query = searchQuery.toLowerCase();
-        if (scheduleName.toLowerCase().includes(query)) {
+        if (entry.user.name?.toLowerCase().includes(query)) {
             return true;
         }
-        return scheduleOncalls.some((oc) =>
-            oc.user.name?.toLowerCase().includes(query) ||
-            oc.user.email?.toLowerCase().includes(query),
-        );
+        if (entry.user.email?.toLowerCase().includes(query)) {
+            return true;
+        }
+        return entry.schedules.some((s) => s.name.toLowerCase().includes(query));
     });
 
-    const showSearch = Object.keys(oncallsBySchedule).length > 5;
+    const showSearch = groupedUsers.length > 5;
 
     return (
         <div className='oncall-list'>
-            <div
-                style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: theme.centerChannelColor,
-                    marginBottom: '16px',
-                }}
-            >
-                {'Currently On-Call'}
-            </div>
             {showSearch && (
                 <input
                     type='text'
@@ -138,91 +154,106 @@ const OnCallList: React.FC<Props> = ({onCalls, theme, loading, error, onPageUser
                     }}
                 />
             )}
-            {filteredEntries.length === 0 && searchQuery && (
+            {filteredUsers.length === 0 && searchQuery && (
                 <div style={{color: theme.centerChannelColor, opacity: 0.7, fontSize: '14px'}}>
                     {'No on-call users match your search.'}
                 </div>
             )}
-            {filteredEntries.map(([scheduleName, scheduleOncalls]) => (
+            {filteredUsers.map((entry, index) => (
                 <div
-                    key={scheduleName}
-                    style={{marginBottom: '16px'}}
+                    key={entry.user.id}
+                    className='oncall-user-row'
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '10px 0',
+                        borderBottom: index < filteredUsers.length - 1 ? `1px solid ${theme.centerChannelColor}10` : 'none',
+                    }}
                 >
-                    <div
-                        style={{
-                            fontSize: '13px',
-                            fontWeight: 500,
-                            color: theme.centerChannelColor,
-                            opacity: 0.8,
-                            marginBottom: '8px',
-                        }}
-                    >
-                        {scheduleName}
-                    </div>
-                    {scheduleOncalls.map((oncall, index) => (
-                        <div
-                            key={`${oncall.user.id}-${index}`}
+                    {entry.user.avatar_url ? (
+                        <img
+                            src={entry.user.avatar_url}
+                            alt={entry.user.name}
                             style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                marginRight: '10px',
+                                flexShrink: 0,
+                            }}
+                        />
+                    ) : (
+                        <div
+                            style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                marginRight: '10px',
+                                flexShrink: 0,
+                                backgroundColor: theme.centerChannelColor + '20',
                                 display: 'flex',
                                 alignItems: 'center',
-                                padding: '8px',
-                                backgroundColor: theme.centerChannelBg,
-                                border: `1px solid ${theme.centerChannelColor}20`,
-                                borderRadius: '4px',
-                                marginBottom: '8px',
+                                justifyContent: 'center',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: theme.centerChannelColor,
                             }}
                         >
-                            {oncall.user.avatar_url && (
-                                <img
-                                    src={oncall.user.avatar_url}
-                                    alt={oncall.user.name}
-                                    style={{
-                                        width: '32px',
-                                        height: '32px',
-                                        borderRadius: '50%',
-                                        marginRight: '12px',
-                                    }}
-                                />
-                            )}
-                            <div style={{flex: 1, minWidth: 0}}>
-                                <div style={{fontWeight: 500, color: theme.centerChannelColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const}}>
-                                    {oncall.user.name}
-                                </div>
-                                <div style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.7}}>
-                                    {oncall.user.email}
-                                </div>
-                                {oncall.escalation_level > 0 && (
-                                    <div style={{fontSize: '11px', color: theme.centerChannelColor, opacity: 0.5}}>
-                                        {`Level ${oncall.escalation_level}`}
-                                    </div>
-                                )}
-                            </div>
-                            {onPageUser && (
-                                <button
-                                    className='page-oncall-button'
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onPageUser(oncall.user);
-                                    }}
-                                    aria-label={`Page ${oncall.user.name}`}
-                                    style={{
-                                        backgroundColor: theme.buttonBg,
-                                        color: theme.buttonColor,
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        padding: '4px 10px',
-                                        fontSize: '11px',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        marginLeft: '8px',
-                                        whiteSpace: 'nowrap' as const,
-                                    }}
-                                >
-                                    {'Page'}
-                                </button>
-                            )}
+                            {entry.user.name?.charAt(0)?.toUpperCase() || '?'}
                         </div>
-                    ))}
+                    )}
+                    <div style={{flex: 1, minWidth: 0}}>
+                        <div
+                            title={entry.user.email || entry.user.name}
+                            style={{
+                                fontWeight: 500,
+                                fontSize: '13px',
+                                color: theme.centerChannelColor,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap' as const,
+                            }}
+                        >
+                            {entry.user.name}
+                        </div>
+                        <div
+                            style={{
+                                fontSize: '12px',
+                                color: theme.centerChannelColor,
+                                opacity: 0.6,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap' as const,
+                            }}
+                        >
+                            {entry.schedules.map((s) => s.name).join(' \u00B7 ')}
+                        </div>
+                    </div>
+                    {onPageUser && (
+                        <button
+                            className='page-oncall-button'
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onPageUser(entry.user);
+                            }}
+                            aria-label={`Page ${entry.user.name}`}
+                            style={{
+                                backgroundColor: theme.buttonBg,
+                                color: theme.buttonColor,
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                marginLeft: '8px',
+                                whiteSpace: 'nowrap' as const,
+                                flexShrink: 0,
+                            }}
+                        >
+                            {'Page'}
+                        </button>
+                    )}
                 </div>
             ))}
         </div>

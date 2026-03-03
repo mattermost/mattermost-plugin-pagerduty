@@ -69,7 +69,6 @@ describe('OnCallList', () => {
             />,
         );
 
-        expect(screen.getByText('Currently On-Call')).toBeInTheDocument();
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('Jane Smith')).toBeInTheDocument();
     });
@@ -113,7 +112,7 @@ describe('OnCallList', () => {
         expect(screen.getByText('No one is currently on-call across your schedules.')).toBeInTheDocument();
     });
 
-    it('should display schedule names', () => {
+    it('should display schedule names below user name', () => {
         render(
             <OnCallList
                 onCalls={mockOnCalls}
@@ -123,25 +122,42 @@ describe('OnCallList', () => {
             />,
         );
 
+        // Schedule names are shown as text below the user name
         expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
         expect(screen.getByText('Secondary On-Call')).toBeInTheDocument();
     });
 
-    it('should display escalation levels', () => {
+    it('should deduplicate users across schedules', () => {
+        const duplicateOnCalls = [
+            {
+                ...mockOnCalls[0],
+                schedule: {id: 'SCHED1', name: 'Primary', description: '', time_zone: 'UTC', summary: 'Primary'},
+            },
+            {
+                ...mockOnCalls[0],
+                schedule: {id: 'SCHED2', name: 'Secondary', description: '', time_zone: 'UTC', summary: 'Secondary'},
+                escalation_level: 2,
+            },
+        ];
+
         render(
             <OnCallList
-                onCalls={mockOnCalls}
+                onCalls={duplicateOnCalls}
                 theme={mockTheme}
                 loading={false}
                 error={null}
             />,
         );
 
-        expect(screen.getByText('Level 1')).toBeInTheDocument();
-        expect(screen.getByText('Level 2')).toBeInTheDocument();
+        // User should appear only once
+        const nameElements = screen.getAllByText('John Doe');
+        expect(nameElements).toHaveLength(1);
+
+        // Both schedules shown as combined text
+        expect(screen.getByText('Primary \u00B7 Secondary')).toBeInTheDocument();
     });
 
-    it('should display user emails', () => {
+    it('should show email as tooltip on user name', () => {
         render(
             <OnCallList
                 onCalls={mockOnCalls}
@@ -151,8 +167,8 @@ describe('OnCallList', () => {
             />,
         );
 
-        expect(screen.getByText('john@example.com')).toBeInTheDocument();
-        expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+        expect(screen.getByTitle('john@example.com')).toBeInTheDocument();
+        expect(screen.getByTitle('jane@example.com')).toBeInTheDocument();
     });
 
     it('should display user avatars', () => {
@@ -189,6 +205,27 @@ describe('OnCallList', () => {
         );
 
         expect(screen.getByText('John Doe')).toBeInTheDocument();
-        expect(screen.queryByText('Primary On-Call')).not.toBeInTheDocument();
+        expect(screen.getByText('Unknown Schedule')).toBeInTheDocument();
+    });
+
+    it('should show fallback avatar when no avatar_url', () => {
+        const onCallsNoAvatar = [
+            {
+                ...mockOnCalls[0],
+                user: {...mockOnCalls[0].user, avatar_url: ''},
+            },
+        ];
+
+        render(
+            <OnCallList
+                onCalls={onCallsNoAvatar}
+                theme={mockTheme}
+                loading={false}
+                error={null}
+            />,
+        );
+
+        // Should show initial letter as fallback
+        expect(screen.getByText('J')).toBeInTheDocument();
     });
 });
