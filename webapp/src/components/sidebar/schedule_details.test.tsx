@@ -67,7 +67,7 @@ describe('ScheduleDetails', () => {
             />,
         );
 
-        expect(screen.getByText('On-Call Schedule')).toBeInTheDocument();
+        expect(screen.getByText('Primary On-Call')).toBeInTheDocument();
     });
 
     it('should show loading state', () => {
@@ -94,7 +94,11 @@ describe('ScheduleDetails', () => {
         );
 
         expect(screen.getByText('John Doe')).toBeInTheDocument();
-        expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+        expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+
+        // Email is shown as a title tooltip, not visible text
+        expect(screen.getByTitle('john@example.com')).toBeInTheDocument();
+        expect(screen.getByTitle('jane@example.com')).toBeInTheDocument();
     });
 
     it('should show empty state when no schedule entries', () => {
