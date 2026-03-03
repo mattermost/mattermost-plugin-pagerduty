@@ -55,13 +55,14 @@ type OnCallSnapshot struct {
 
 // OnCallEntry represents a single on-call entry in the snapshot.
 type OnCallEntry struct {
-	UserID       string `json:"user_id"`
-	UserName     string `json:"user_name"`
-	UserEmail    string `json:"user_email"`
-	ScheduleID   string `json:"schedule_id"`
-	ScheduleName string `json:"schedule_name"`
-	Start        string `json:"start"`
-	End          string `json:"end"`
+	UserID             string `json:"user_id"`
+	UserName           string `json:"user_name"`
+	UserEmail          string `json:"user_email"`
+	ScheduleID         string `json:"schedule_id"`
+	ScheduleName       string `json:"schedule_name"`
+	EscalationPolicyID string `json:"escalation_policy_id,omitempty"`
+	Start              string `json:"start"`
+	End                string `json:"end"`
 }
 
 // ReminderRecord tracks which shift reminders have been sent.

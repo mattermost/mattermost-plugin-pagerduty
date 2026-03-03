@@ -22,8 +22,8 @@ func TestSubscriptionMatchesEvent(t *testing.T) {
 			EventTypes: []string{EventIncidentTriggered, EventIncidentResolved},
 			ServiceIDs: []string{},
 		}
-		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, "any-service"))
-		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentResolved, "any-service"))
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, []string{"any-service"}))
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentResolved, []string{"any-service"}))
 	})
 
 	t.Run("does not match event type", func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestSubscriptionMatchesEvent(t *testing.T) {
 			EventTypes: []string{EventIncidentTriggered},
 			ServiceIDs: []string{},
 		}
-		assert.False(t, p.subscriptionMatchesEvent(sub, EventIncidentResolved, "any-service"))
+		assert.False(t, p.subscriptionMatchesEvent(sub, EventIncidentResolved, []string{"any-service"}))
 	})
 
 	t.Run("matches event type and service filter", func(t *testing.T) {
@@ -39,8 +39,8 @@ func TestSubscriptionMatchesEvent(t *testing.T) {
 			EventTypes: []string{EventIncidentTriggered},
 			ServiceIDs: []string{"svc-1", "svc-2"},
 		}
-		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, "svc-1"))
-		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, "svc-2"))
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, []string{"svc-1"}))
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, []string{"svc-2"}))
 	})
 
 	t.Run("does not match service filter", func(t *testing.T) {
@@ -48,7 +48,49 @@ func TestSubscriptionMatchesEvent(t *testing.T) {
 			EventTypes: []string{EventIncidentTriggered},
 			ServiceIDs: []string{"svc-1"},
 		}
-		assert.False(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, "svc-other"))
+		assert.False(t, p.subscriptionMatchesEvent(sub, EventIncidentTriggered, []string{"svc-other"}))
+	})
+
+	t.Run("on-call change matches via resolved service IDs", func(t *testing.T) {
+		sub := &ChannelSubscription{
+			EventTypes: []string{EventOnCallChange},
+			ServiceIDs: []string{"svc-1"},
+		}
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventOnCallChange, []string{"svc-1"}))
+	})
+
+	t.Run("on-call change does not match wrong service", func(t *testing.T) {
+		sub := &ChannelSubscription{
+			EventTypes: []string{EventOnCallChange},
+			ServiceIDs: []string{"svc-1"},
+		}
+		assert.False(t, p.subscriptionMatchesEvent(sub, EventOnCallChange, []string{"svc-2"}))
+	})
+
+	t.Run("on-call change with empty resolved IDs skips service-filtered channels", func(t *testing.T) {
+		sub := &ChannelSubscription{
+			EventTypes: []string{EventOnCallChange},
+			ServiceIDs: []string{"svc-1"},
+		}
+		// No service IDs resolved (EP mapping not populated) — skip to avoid false positives
+		assert.False(t, p.subscriptionMatchesEvent(sub, EventOnCallChange, []string{}))
+	})
+
+	t.Run("on-call change with empty resolved IDs delivers to unfiltered channels", func(t *testing.T) {
+		sub := &ChannelSubscription{
+			EventTypes: []string{EventOnCallChange},
+			ServiceIDs: []string{}, // No service filter
+		}
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventOnCallChange, []string{}))
+	})
+
+	t.Run("on-call change with multiple resolved IDs matches any", func(t *testing.T) {
+		sub := &ChannelSubscription{
+			EventTypes: []string{EventOnCallChange},
+			ServiceIDs: []string{"svc-2"},
+		}
+		// EP maps to multiple services; svc-2 matches
+		assert.True(t, p.subscriptionMatchesEvent(sub, EventOnCallChange, []string{"svc-1", "svc-2"}))
 	})
 }
 
@@ -253,7 +295,7 @@ func TestRouteToSubscribedChannels(t *testing.T) {
 		}
 
 		// Should post to channel-1 (matches event type) but not channel-2
-		p.routeToSubscribedChannels(EventIncidentTriggered, "svc-1", "Test message")
+		p.routeToSubscribedChannels(EventIncidentTriggered, []string{"svc-1"}, "Test message")
 
 		assert.Contains(t, postedChannels, "channel-1")
 		assert.NotContains(t, postedChannels, "channel-2")
