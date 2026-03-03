@@ -70,9 +70,10 @@ func (p *Plugin) verifyWebhookSignature(body []byte, signatureHeader string) boo
 	// Get the secret from either the webhook registration or config
 	secret := p.getWebhookSecret()
 	if secret == "" {
-		// If no secret is configured, skip verification but log a warning
-		p.client.Log.Warn("No webhook secret configured, skipping signature verification")
-		return true
+		// Reject webhooks when no secret is configured — accepting unverified
+		// payloads would allow any external party to inject fake events.
+		p.client.Log.Warn("No webhook secret configured, rejecting webhook request")
+		return false
 	}
 
 	if signatureHeader == "" {

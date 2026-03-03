@@ -82,13 +82,13 @@ func TestVerifyWebhookSignature(t *testing.T) {
 		assert.False(t, p.verifyWebhookSignature(body, ""))
 	})
 
-	t.Run("no secret configured skips verification", func(t *testing.T) {
+	t.Run("no secret configured rejects webhook", func(t *testing.T) {
 		p.kvstore = &mockKVStore{}
 		p.configuration = &configuration{}
 
 		body := []byte(`{"event":{"id":"test"}}`)
 
-		assert.True(t, p.verifyWebhookSignature(body, ""))
+		assert.False(t, p.verifyWebhookSignature(body, ""))
 	})
 
 	t.Run("invalid signature format", func(t *testing.T) {

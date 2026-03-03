@@ -377,6 +377,17 @@ func (p *Plugin) handleUpdateIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate that the status is a known PagerDuty incident status.
+	validStatuses := map[string]bool{"acknowledged": true, "resolved": true}
+	if !validStatuses[req.Status] {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.incident.status.invalid",
+			Message:    "Status must be 'acknowledged' or 'resolved'",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
 	email, err := p.getUserEmail(userID)
 	if err != nil {
 		p.client.Log.Error("Failed to get user email", "error", err.Error(), "user_id", userID)
@@ -742,6 +753,17 @@ func (p *Plugin) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Verify the user is a member of the target channel to prevent
+	// unauthorized users from creating subscriptions on arbitrary channels.
+	if _, err := p.client.Channel.GetMember(req.ChannelID, userID); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.forbidden",
+			Message:    "You must be a member of the channel to manage its subscriptions",
+			StatusCode: http.StatusForbidden,
+		})
+		return
+	}
+
 	eventTypes := req.EventTypes
 	if len(eventTypes) == 0 {
 		eventTypes = AllEventTypes
@@ -772,6 +794,8 @@ func (p *Plugin) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 }
 
 func (p *Plugin) handleDeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+
 	vars := mux.Vars(r)
 	channelID := vars["channelId"]
 	if channelID == "" {
@@ -779,6 +803,16 @@ func (p *Plugin) handleDeleteSubscription(w http.ResponseWriter, r *http.Request
 			ID:         "api.pagerduty.subscription.channel.missing",
 			Message:    "Channel ID is required",
 			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	// Verify the user is a member of the target channel.
+	if _, err := p.client.Channel.GetMember(channelID, userID); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.subscription.forbidden",
+			Message:    "You must be a member of the channel to manage its subscriptions",
+			StatusCode: http.StatusForbidden,
 		})
 		return
 	}
