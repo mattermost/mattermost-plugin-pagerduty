@@ -7,10 +7,26 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/pkg/errors"
 )
+
+// validPagerDutyID matches PagerDuty resource IDs (alphanumeric, typically uppercase like "PABCDEF").
+var validPagerDutyID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// validateID checks that a PagerDuty resource ID is well-formed to prevent
+// path traversal when IDs are interpolated into URL paths.
+func validateID(id, label string) error {
+	if id == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	if !validPagerDutyID.MatchString(id) {
+		return fmt.Errorf("invalid %s format", label)
+	}
+	return nil
+}
 
 const (
 	defaultBaseURL = "https://api.pagerduty.com"
@@ -105,7 +121,9 @@ func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Val
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	// Limit response body to 10MB to prevent OOM from oversized responses.
+	const maxResponseSize = 10 << 20
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read response body")
 	}
@@ -140,6 +158,10 @@ func (c *Client) GetSchedules(limit, offset int) (*SchedulesResponse, error) {
 }
 
 func (c *Client) GetSchedule(scheduleID string, since, until time.Time) (*ScheduleResponse, error) {
+	if err := validateID(scheduleID, "schedule ID"); err != nil {
+		return nil, err
+	}
+
 	params := url.Values{}
 	params.Set("since", since.Format(time.RFC3339))
 	params.Set("until", until.Format(time.RFC3339))
@@ -289,6 +311,10 @@ func (c *Client) GetIncidents(statuses, userIDs []string, limit, offset int) (*I
 
 // UpdateIncident updates an incident's status (acknowledge, resolve)
 func (c *Client) UpdateIncident(incidentID, status, fromEmail string) (*IncidentResponse, error) {
+	if err := validateID(incidentID, "incident ID"); err != nil {
+		return nil, err
+	}
+
 	request := UpdateIncidentRequest{
 		Incident: UpdateIncidentBody{
 			Type:   "incident_reference",
@@ -315,6 +341,10 @@ func (c *Client) UpdateIncident(incidentID, status, fromEmail string) (*Incident
 
 // GetIncidentNotes retrieves notes for a specific incident
 func (c *Client) GetIncidentNotes(incidentID string) (*IncidentNotesResponse, error) {
+	if err := validateID(incidentID, "incident ID"); err != nil {
+		return nil, err
+	}
+
 	body, err := c.doRequest("GET", fmt.Sprintf("/incidents/%s/notes", incidentID), nil)
 	if err != nil {
 		return nil, err
@@ -378,6 +408,10 @@ func (c *Client) GetUsers(query string, limit int) (*UsersResponse, error) {
 
 // CreateOverride creates an override on a PagerDuty schedule
 func (c *Client) CreateOverride(scheduleID, start, end, userID string) (*OverrideResponse, error) {
+	if err := validateID(scheduleID, "schedule ID"); err != nil {
+		return nil, err
+	}
+
 	request := CreateOverrideRequest{
 		Override: Override{
 			Start: start,
@@ -404,6 +438,10 @@ func (c *Client) CreateOverride(scheduleID, start, end, userID string) (*Overrid
 
 // CreateIncidentNote creates a note on an incident
 func (c *Client) CreateIncidentNote(incidentID, content, fromEmail string) (*CreateIncidentNoteResponse, error) {
+	if err := validateID(incidentID, "incident ID"); err != nil {
+		return nil, err
+	}
+
 	request := CreateIncidentNoteRequest{
 		Note: CreateIncidentNoteBody{
 			Content: content,
@@ -467,6 +505,10 @@ func (c *Client) CreateWebhookSubscription(webhookURL, secret, description strin
 
 // DeleteWebhookSubscription removes a webhook subscription from PagerDuty.
 func (c *Client) DeleteWebhookSubscription(subscriptionID string) error {
+	if err := validateID(subscriptionID, "subscription ID"); err != nil {
+		return err
+	}
+
 	_, err := c.doRequest("DELETE", fmt.Sprintf("/webhook_subscriptions/%s", subscriptionID), nil)
 	return err
 }

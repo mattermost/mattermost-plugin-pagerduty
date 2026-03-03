@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -166,7 +167,8 @@ func (p *Plugin) exchangeCodeForToken(code string) (*kvstore.OAuthToken, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	const maxTokenResponseSize = 1 << 20 // 1MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseSize))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read token response")
 	}
@@ -239,10 +241,13 @@ func (p *Plugin) writeOAuthResultPage(w http.ResponseWriter, success bool, errMs
 		message = "Successfully connected to PagerDuty. You can close this window."
 	} else {
 		title = "Connection Failed"
-		message = fmt.Sprintf("Failed to connect to PagerDuty: %s", errMsg)
+		// HTML-escape the error message to prevent reflected XSS — errMsg may
+		// originate from PagerDuty's error_description query parameter which is
+		// attacker-controllable.
+		message = fmt.Sprintf("Failed to connect to PagerDuty: %s", html.EscapeString(errMsg))
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
+	page := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head><title>PagerDuty - %s</title></head>
 <body>
@@ -254,9 +259,9 @@ if (window.opener) {
 }
 </script>
 </body>
-</html>`, title, title, message)
+</html>`, html.EscapeString(title), html.EscapeString(title), message)
 
-	fmt.Fprint(w, html)
+	fmt.Fprint(w, page)
 }
 
 func (p *Plugin) refreshUserToken(userID string, token *kvstore.OAuthToken) (*kvstore.OAuthToken, error) {
@@ -274,7 +279,8 @@ func (p *Plugin) refreshUserToken(userID string, token *kvstore.OAuthToken) (*kv
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	const maxTokenResponseSize = 1 << 20 // 1MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseSize))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read refresh token response")
 	}
