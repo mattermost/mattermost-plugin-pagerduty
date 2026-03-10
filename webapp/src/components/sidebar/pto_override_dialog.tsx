@@ -43,13 +43,14 @@ export const BulkOverrideDialog: React.FC<Props> = ({
     }, [entries]);
 
     const [targetUserId, setTargetUserId] = useState('');
-    const [coverUserId, setCoverUserId] = useState(currentUser?.id || '');
 
     // Date range defaults: start = now, end = 1 week from now
-    const now = new Date();
-    const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const [startLocal, setStartLocal] = useState(formatDateTimeLocal(now));
-    const [endLocal, setEndLocal] = useState(formatDateTimeLocal(oneWeekLater));
+    const [startLocal, setStartLocal] = useState(() => formatDateTimeLocal(new Date()));
+    const [endLocal, setEndLocal] = useState(() => {
+        const weekFromNow = new Date();
+        weekFromNow.setDate(weekFromNow.getDate() + 7);
+        return formatDateTimeLocal(weekFromNow);
+    });
 
     // Cover user search
     const [coverQuery, setCoverQuery] = useState(currentUser?.name || '');
@@ -75,17 +76,17 @@ export const BulkOverrideDialog: React.FC<Props> = ({
             return;
         }
 
-        const startISO = new Date(start).toISOString();
-        const endISO = new Date(end).toISOString();
+        const startDate = new Date(start);
+        const endDate = new Date(end);
 
-        if (new Date(endISO) <= new Date(startISO)) {
+        if (endDate <= startDate) {
             setPreview(null);
             return;
         }
 
         setLoadingPreview(true);
         try {
-            const data = await client.getBulkOverridePreview(scheduleId, startISO, endISO, target);
+            const data = await client.getBulkOverridePreview(scheduleId, startDate.toISOString(), endDate.toISOString(), target);
             setPreview(data);
         } catch {
             setPreview(null);
@@ -131,7 +132,6 @@ export const BulkOverrideDialog: React.FC<Props> = ({
     const handleCoverQueryChange = (value: string) => {
         setCoverQuery(value);
         setSelectedCoverUser(null);
-        setCoverUserId('');
         if (searchDebounceRef.current) {
             clearTimeout(searchDebounceRef.current);
         }
@@ -140,21 +140,22 @@ export const BulkOverrideDialog: React.FC<Props> = ({
 
     const handleSelectCoverUser = (user: User) => {
         setSelectedCoverUser(user);
-        setCoverUserId(user.id);
         setCoverQuery(user.name);
         setShowDropdown(false);
     };
+
+    const coverUserId = selectedCoverUser?.id || '';
 
     const handleSubmit = async () => {
         if (!targetUserId) {
             setError('Please select the person to override');
             return;
         }
-        if (!coverUserId) {
+        if (!selectedCoverUser) {
             setError('Please select a cover person');
             return;
         }
-        if (targetUserId === coverUserId) {
+        if (targetUserId === selectedCoverUser.id) {
             setError('Cover person must be different from the person being overridden');
             return;
         }
@@ -165,7 +166,7 @@ export const BulkOverrideDialog: React.FC<Props> = ({
         setSubmitting(true);
         setError(null);
         try {
-            const response = await client.createBulkOverride(scheduleId, start, end, targetUserId, coverUserId);
+            const response = await client.createBulkOverride(scheduleId, start, end, targetUserId, selectedCoverUser.id);
             setResult(response);
             if (response.created > 0) {
                 onSuccess(response);
@@ -177,13 +178,11 @@ export const BulkOverrideDialog: React.FC<Props> = ({
         }
     };
 
+    // Clean up search debounce on unmount (preview debounce is cleaned up by its own effect)
     useEffect(() => {
         return () => {
             if (searchDebounceRef.current) {
                 clearTimeout(searchDebounceRef.current);
-            }
-            if (previewDebounceRef.current) {
-                clearTimeout(previewDebounceRef.current);
             }
         };
     }, []);
@@ -475,6 +474,4 @@ export const BulkOverrideDialog: React.FC<Props> = ({
     );
 };
 
-// Keep backward-compatible export name (file was originally named pto_override_dialog)
-export const PTOOverrideDialog = BulkOverrideDialog;
 export default BulkOverrideDialog;

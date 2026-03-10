@@ -134,16 +134,18 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         }
     };
 
-    const handlePagingSuccess = (incident: CreateIncidentResponse) => {
-        setSuccessMessage(`Incident created: ${incident.incident.title}`);
-        setShowPagingDialog(false);
-        setPagingTarget(null);
-
-        // Clear success message after 5 seconds
+    const showTemporarySuccess = (msg: string, durationMs = 5000) => {
+        setSuccessMessage(msg);
         if (successTimeoutRef.current) {
             clearTimeout(successTimeoutRef.current);
         }
-        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), durationMs);
+    };
+
+    const handlePagingSuccess = (incident: CreateIncidentResponse) => {
+        showTemporarySuccess(`Incident created: ${incident.incident.title}`);
+        setShowPagingDialog(false);
+        setPagingTarget(null);
     };
 
     const handleClosePagingDialog = () => {
@@ -162,11 +164,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
             const now = new Date();
             const start = new Date(entryStart) <= now ? now.toISOString() : entryStart;
             await client.createOverride(schedule.id, start, entryEnd, currentUser.id);
-            setSuccessMessage('Shift taken successfully');
-            if (successTimeoutRef.current) {
-                clearTimeout(successTimeoutRef.current);
-            }
-            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+            showTemporarySuccess('Shift taken successfully');
             if (onOverrideCreated) {
                 onOverrideCreated();
             }
@@ -188,11 +186,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     const handleOverrideSuccess = () => {
         setShowOverrideDialog(false);
         setOverrideEntry(null);
-        setSuccessMessage('Override created successfully');
-        if (successTimeoutRef.current) {
-            clearTimeout(successTimeoutRef.current);
-        }
-        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+        showTemporarySuccess('Override created successfully');
         if (onOverrideCreated) {
             onOverrideCreated();
         }
@@ -202,11 +196,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         const msg = response.failed === 0
             ? `Bulk override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
             : `Bulk override: ${response.created} created, ${response.failed} failed`;
-        setSuccessMessage(msg);
-        if (successTimeoutRef.current) {
-            clearTimeout(successTimeoutRef.current);
-        }
-        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 8000);
+        showTemporarySuccess(msg, 8000);
         if (onOverrideCreated) {
             onOverrideCreated();
         }

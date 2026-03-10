@@ -763,8 +763,6 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	scheduleID := req.ScheduleID
-
 	startTime, endTime, ok := p.parseBulkOverrideDateRange(w, r, req.Start, req.End)
 	if !ok {
 		return
@@ -775,13 +773,13 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	targetEntries, ok := p.getTargetEntries(w, r, pdClient, scheduleID, startTime, endTime, req.TargetUserID)
+	targetEntries, ok := p.getTargetEntries(w, r, pdClient, req.ScheduleID, startTime, endTime, req.TargetUserID)
 	if !ok {
 		return
 	}
 
 	if len(targetEntries) == 0 {
-		p.client.Log.Debug("No shifts found for target user in override range", "schedule_id", scheduleID, "target_user_id", req.TargetUserID)
+		p.client.Log.Debug("No shifts found for target user in override range", "schedule_id", req.ScheduleID, "target_user_id", req.TargetUserID)
 		resp := BulkOverrideResponse{
 			TotalShifts: 0,
 			Created:     0,
@@ -800,11 +798,11 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 	failed := 0
 
 	for _, entry := range targetEntries {
-		_, overrideErr := pdClient.CreateOverride(scheduleID, entry.Start, entry.End, req.CoverUserID)
+		_, overrideErr := pdClient.CreateOverride(req.ScheduleID, entry.Start, entry.End, req.CoverUserID)
 		if overrideErr != nil {
 			p.client.Log.Warn("Failed to create bulk override for shift",
 				"error", overrideErr.Error(),
-				"schedule_id", scheduleID,
+				"schedule_id", req.ScheduleID,
 				"start", entry.Start,
 				"end", entry.End,
 			)
@@ -826,7 +824,7 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 	}
 
 	p.client.Log.Debug("Bulk override completed",
-		"schedule_id", scheduleID,
+		"schedule_id", req.ScheduleID,
 		"total_shifts", len(targetEntries),
 		"created", created,
 		"failed", failed,
