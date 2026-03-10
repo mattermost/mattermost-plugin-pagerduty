@@ -215,6 +215,20 @@ export interface OverrideResponse {
     override: Override;
 }
 
+export interface PTOOverrideResult {
+    start: string;
+    end: string;
+    success: boolean;
+    error?: string;
+}
+
+export interface PTOOverrideResponse {
+    total_shifts: number;
+    created: number;
+    failed: number;
+    results: PTOOverrideResult[];
+}
+
 // --- Channel Subscriptions ---
 
 export interface ChannelSubscription {

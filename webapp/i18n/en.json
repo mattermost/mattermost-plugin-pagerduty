@@ -47,5 +47,17 @@
     "pagerduty.sidebar.override.creating": "Creating...",
     "pagerduty.sidebar.override.cancel": "Cancel",
     "pagerduty.sidebar.override.success": "Override created successfully",
-    "pagerduty.sidebar.override.shiftTaken": "Shift taken successfully"
+    "pagerduty.sidebar.override.shiftTaken": "Shift taken successfully",
+    "pagerduty.sidebar.ptoOverride.title": "PTO Override",
+    "pagerduty.sidebar.ptoOverride.description": "Override all shifts for a person on {scheduleName}",
+    "pagerduty.sidebar.ptoOverride.personOnPTO": "Person on PTO",
+    "pagerduty.sidebar.ptoOverride.selectPerson": "Select person...",
+    "pagerduty.sidebar.ptoOverride.coveringPerson": "Covering person",
+    "pagerduty.sidebar.ptoOverride.ptoStarts": "PTO starts",
+    "pagerduty.sidebar.ptoOverride.ptoEnds": "PTO ends",
+    "pagerduty.sidebar.ptoOverride.create": "Create PTO Override",
+    "pagerduty.sidebar.ptoOverride.creating": "Creating overrides...",
+    "pagerduty.sidebar.ptoOverride.noShifts": "No shifts found for this person in the selected date range.",
+    "pagerduty.sidebar.ptoOverride.success": "PTO override complete: {count} shift(s) overridden",
+    "pagerduty.sidebar.ptoOverride.partial": "PTO override: {created} created, {failed} failed"
 }

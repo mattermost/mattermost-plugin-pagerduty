@@ -5,9 +5,10 @@ import React, {useEffect, useRef, useState} from 'react';
 
 import {OverrideDialog} from './override_dialog';
 import {PagingDialog} from './paging_dialog';
+import {PTOOverrideDialog} from './pto_override_dialog';
 
 import client from '@/client/client';
-import type {Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
+import type {PTOOverrideResponse, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -29,6 +30,9 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     const [showOverrideDialog, setShowOverrideDialog] = useState(false);
     const [overrideEntry, setOverrideEntry] = useState<{start: string; end: string} | null>(null);
     const [takingShift, setTakingShift] = useState<string | null>(null);
+
+    // PTO override state
+    const [showPTODialog, setShowPTODialog] = useState(false);
 
     useEffect(() => {
         return () => {
@@ -194,6 +198,20 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         }
     };
 
+    const handlePTOOverrideSuccess = (response: PTOOverrideResponse) => {
+        const msg = response.failed === 0
+            ? `PTO override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
+            : `PTO override: ${response.created} created, ${response.failed} failed`;
+        setSuccessMessage(msg);
+        if (successTimeoutRef.current) {
+            clearTimeout(successTimeoutRef.current);
+        }
+        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 8000);
+        if (onOverrideCreated) {
+            onOverrideCreated();
+        }
+    };
+
     if (loading) {
         return (
             <div
@@ -263,17 +281,39 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                 </div>
             )}
 
-            <h4
-                className='schedule-section-title'
-                style={{
-                    color: theme.centerChannelColor,
-                    margin: '0 0 12px 0',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                }}
-            >
-                {schedule.name}
-            </h4>
+            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px'}}>
+                <h4
+                    className='schedule-section-title'
+                    style={{
+                        color: theme.centerChannelColor,
+                        margin: 0,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                    }}
+                >
+                    {schedule.name}
+                </h4>
+                {currentUser && (
+                    <button
+                        className='pto-override-button'
+                        onClick={() => setShowPTODialog(true)}
+                        aria-label='PTO Override'
+                        style={{
+                            backgroundColor: 'transparent',
+                            color: theme.linkColor,
+                            border: `1px solid ${theme.linkColor}40`,
+                            borderRadius: '4px',
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap' as const,
+                        }}
+                    >
+                        {'PTO Override'}
+                    </button>
+                )}
+            </div>
 
             {!schedule.final_schedule && (
                 <div
@@ -499,6 +539,18 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                         setOverrideEntry(null);
                     }}
                     onSuccess={handleOverrideSuccess}
+                />
+            )}
+
+            {showPTODialog && schedule && (
+                <PTOOverrideDialog
+                    theme={theme}
+                    scheduleId={schedule.id}
+                    scheduleName={schedule.name}
+                    entries={entries}
+                    currentUser={currentUser}
+                    onClose={() => setShowPTODialog(false)}
+                    onSuccess={handlePTOOverrideSuccess}
                 />
             )}
         </div>

@@ -38,6 +38,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	authRouter.HandleFunc("/users/me", p.handleGetCurrentUser).Methods(http.MethodGet)
 	authRouter.HandleFunc("/users", p.handleGetUsers).Methods(http.MethodGet)
 	authRouter.HandleFunc("/schedules/{id}/overrides", p.handleCreateOverride).Methods(http.MethodPost)
+	authRouter.HandleFunc("/schedules/{id}/pto-override", p.handleCreatePTOOverride).Methods(http.MethodPost)
 
 	// Subscription management endpoints
 	authRouter.HandleFunc("/subscriptions", p.handleGetSubscriptions).Methods(http.MethodGet)

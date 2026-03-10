@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
-import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus} from '@/types/pagerduty';
+import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus, PTOOverrideResponse} from '@/types/pagerduty';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -172,6 +172,20 @@ export class Client {
         const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/overrides`, {
             method: 'POST',
             body: JSON.stringify({start, end, user_id: userId}),
+        });
+
+        return response.json();
+    }
+
+    async createPTOOverride(scheduleId: string, start: string, end: string, targetUserId: string, coverUserId: string): Promise<PTOOverrideResponse> {
+        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/pto-override`, {
+            method: 'POST',
+            body: JSON.stringify({
+                start,
+                end,
+                target_user_id: targetUserId,
+                cover_user_id: coverUserId,
+            }),
         });
 
         return response.json();

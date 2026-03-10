@@ -579,6 +579,205 @@ func (p *Plugin) handleCreateOverride(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CreatePTOOverrideAPIRequest represents the API request body for creating bulk PTO overrides.
+// It finds all shifts for the target user within the date range and creates overrides for each.
+type CreatePTOOverrideAPIRequest struct {
+	Start        string `json:"start"`
+	End          string `json:"end"`
+	TargetUserID string `json:"target_user_id"`
+	CoverUserID  string `json:"cover_user_id"`
+}
+
+// PTOOverrideResult represents a single override result (success or failure).
+type PTOOverrideResult struct {
+	Start   string `json:"start"`
+	End     string `json:"end"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// PTOOverrideResponse is the response from a PTO override request.
+type PTOOverrideResponse struct {
+	TotalShifts int                 `json:"total_shifts"`
+	Created     int                 `json:"created"`
+	Failed      int                 `json:"failed"`
+	Results     []PTOOverrideResult `json:"results"`
+}
+
+func (p *Plugin) handleCreatePTOOverride(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleCreatePTOOverride called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	vars := mux.Vars(r)
+	scheduleID := vars["id"]
+	if scheduleID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.schedule.missing",
+			Message:    "Schedule ID is required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req CreatePTOOverrideAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.Start == "" || req.End == "" || req.TargetUserID == "" || req.CoverUserID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.fields.missing",
+			Message:    "Start, end, target_user_id, and cover_user_id are required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	startTime, err := time.Parse(time.RFC3339, req.Start)
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.start.invalid",
+			Message:    "Start must be a valid RFC3339 timestamp",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	endTime, err := time.Parse(time.RFC3339, req.End)
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.end.invalid",
+			Message:    "End must be a valid RFC3339 timestamp",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if !endTime.After(startTime) {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.range.invalid",
+			Message:    "End time must be after start time",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	// Cap maximum override window at 30 days to prevent abuse
+	if endTime.Sub(startTime) > 30*24*time.Hour {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.range.too_long",
+			Message:    "PTO override range cannot exceed 30 days",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	// Fetch the rendered schedule for the PTO date range
+	schedule, err := pdClient.GetSchedule(scheduleID, startTime, endTime)
+	if err != nil {
+		p.client.Log.Error("Failed to get schedule for PTO override", "error", err.Error(), "schedule_id", scheduleID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.pto_override.schedule.error",
+			Message:    "Failed to retrieve schedule for the given date range",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	// Find all shifts belonging to the target user
+	var targetEntries []pagerduty.RenderedScheduleEntry
+	if schedule.Schedule.FinalSchedule != nil {
+		for _, entry := range schedule.Schedule.FinalSchedule.RenderedScheduleEntries {
+			if entry.User.ID == req.TargetUserID {
+				targetEntries = append(targetEntries, entry)
+			}
+		}
+	}
+
+	if len(targetEntries) == 0 {
+		p.client.Log.Debug("No shifts found for target user in PTO range", "schedule_id", scheduleID, "target_user_id", req.TargetUserID)
+		resp := PTOOverrideResponse{
+			TotalShifts: 0,
+			Created:     0,
+			Failed:      0,
+			Results:     []PTOOverrideResult{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+			p.client.Log.Error("Failed to encode PTO override response", "error", encErr.Error())
+		}
+		return
+	}
+
+	// Create an override for each of the target user's shifts
+	var results []PTOOverrideResult
+	created := 0
+	failed := 0
+
+	for _, entry := range targetEntries {
+		_, overrideErr := pdClient.CreateOverride(scheduleID, entry.Start, entry.End, req.CoverUserID)
+		if overrideErr != nil {
+			p.client.Log.Warn("Failed to create PTO override for shift",
+				"error", overrideErr.Error(),
+				"schedule_id", scheduleID,
+				"start", entry.Start,
+				"end", entry.End,
+			)
+			results = append(results, PTOOverrideResult{
+				Start:   entry.Start,
+				End:     entry.End,
+				Success: false,
+				Error:   overrideErr.Error(),
+			})
+			failed++
+		} else {
+			results = append(results, PTOOverrideResult{
+				Start:   entry.Start,
+				End:     entry.End,
+				Success: true,
+			})
+			created++
+		}
+	}
+
+	p.client.Log.Debug("PTO override completed",
+		"schedule_id", scheduleID,
+		"total_shifts", len(targetEntries),
+		"created", created,
+		"failed", failed,
+	)
+
+	resp := PTOOverrideResponse{
+		TotalShifts: len(targetEntries),
+		Created:     created,
+		Failed:      failed,
+		Results:     results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	statusCode := http.StatusCreated
+	if failed > 0 && created == 0 {
+		statusCode = http.StatusInternalServerError
+	} else if failed > 0 {
+		statusCode = http.StatusMultiStatus
+	}
+	w.WriteHeader(statusCode)
+	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+		p.client.Log.Error("Failed to encode PTO override response", "error", encErr.Error())
+	}
+}
+
 // CreateIncidentNoteAPIRequest represents the API request for adding a note
 type CreateIncidentNoteAPIRequest struct {
 	Content string `json:"content"`
