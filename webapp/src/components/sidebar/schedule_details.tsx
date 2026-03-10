@@ -5,10 +5,10 @@ import React, {useEffect, useRef, useState} from 'react';
 
 import {OverrideDialog} from './override_dialog';
 import {PagingDialog} from './paging_dialog';
-import {PTOOverrideDialog} from './pto_override_dialog';
+import {BulkOverrideDialog} from './pto_override_dialog';
 
 import client from '@/client/client';
-import type {PTOOverrideResponse, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
+import type {BulkOverrideResponse, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -31,8 +31,8 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     const [overrideEntry, setOverrideEntry] = useState<{start: string; end: string} | null>(null);
     const [takingShift, setTakingShift] = useState<string | null>(null);
 
-    // PTO override state
-    const [showPTODialog, setShowPTODialog] = useState(false);
+    // Bulk override state
+    const [showBulkOverrideDialog, setShowBulkOverrideDialog] = useState(false);
 
     useEffect(() => {
         return () => {
@@ -198,10 +198,10 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         }
     };
 
-    const handlePTOOverrideSuccess = (response: PTOOverrideResponse) => {
+    const handleBulkOverrideSuccess = (response: BulkOverrideResponse) => {
         const msg = response.failed === 0
-            ? `PTO override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
-            : `PTO override: ${response.created} created, ${response.failed} failed`;
+            ? `Bulk override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
+            : `Bulk override: ${response.created} created, ${response.failed} failed`;
         setSuccessMessage(msg);
         if (successTimeoutRef.current) {
             clearTimeout(successTimeoutRef.current);
@@ -295,9 +295,9 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                 </h4>
                 {currentUser && (
                     <button
-                        className='pto-override-button'
-                        onClick={() => setShowPTODialog(true)}
-                        aria-label='PTO Override'
+                        className='bulk-override-button'
+                        onClick={() => setShowBulkOverrideDialog(true)}
+                        aria-label='Bulk Override'
                         style={{
                             backgroundColor: 'transparent',
                             color: theme.linkColor,
@@ -310,7 +310,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                             whiteSpace: 'nowrap' as const,
                         }}
                     >
-                        {'PTO Override'}
+                        {'Bulk Override'}
                     </button>
                 )}
             </div>
@@ -542,15 +542,15 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                 />
             )}
 
-            {showPTODialog && schedule && (
-                <PTOOverrideDialog
+            {showBulkOverrideDialog && schedule && (
+                <BulkOverrideDialog
                     theme={theme}
                     scheduleId={schedule.id}
                     scheduleName={schedule.name}
                     entries={entries}
                     currentUser={currentUser}
-                    onClose={() => setShowPTODialog(false)}
-                    onSuccess={handlePTOOverrideSuccess}
+                    onClose={() => setShowBulkOverrideDialog(false)}
+                    onSuccess={handleBulkOverrideSuccess}
                 />
             )}
         </div>

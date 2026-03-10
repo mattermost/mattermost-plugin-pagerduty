@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
-import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus, PTOOverrideResponse} from '@/types/pagerduty';
+import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus, BulkOverrideResponse, BulkOverridePreviewResponse} from '@/types/pagerduty';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -177,8 +177,14 @@ export class Client {
         return response.json();
     }
 
-    async createPTOOverride(scheduleId: string, start: string, end: string, targetUserId: string, coverUserId: string): Promise<PTOOverrideResponse> {
-        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/pto-override`, {
+    async getBulkOverridePreview(scheduleId: string, start: string, end: string, targetUserId: string): Promise<BulkOverridePreviewResponse> {
+        const params = new URLSearchParams({start, end, target_user_id: targetUserId});
+        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/bulk-override/preview?${params.toString()}`);
+        return response.json();
+    }
+
+    async createBulkOverride(scheduleId: string, start: string, end: string, targetUserId: string, coverUserId: string): Promise<BulkOverrideResponse> {
+        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/bulk-override`, {
             method: 'POST',
             body: JSON.stringify({
                 start,

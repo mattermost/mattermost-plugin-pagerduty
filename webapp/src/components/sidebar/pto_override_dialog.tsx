@@ -4,7 +4,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 import client from '@/client/client';
-import type {PTOOverrideResponse, ScheduleEntry, User} from '@/types/pagerduty';
+import type {BulkOverridePreviewResponse, BulkOverrideResponse, ScheduleEntry, User} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
     entries: ScheduleEntry[];
     currentUser?: User;
     onClose: () => void;
-    onSuccess: (response: PTOOverrideResponse) => void;
+    onSuccess: (response: BulkOverrideResponse) => void;
 }
 
 const formatDateTimeLocal = (date: Date): string => {
@@ -22,7 +22,7 @@ const formatDateTimeLocal = (date: Date): string => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-export const PTOOverrideDialog: React.FC<Props> = ({
+export const BulkOverrideDialog: React.FC<Props> = ({
     theme,
     scheduleId,
     scheduleName,
@@ -57,33 +57,58 @@ export const PTOOverrideDialog: React.FC<Props> = ({
     const [loadingSearch, setLoadingSearch] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [selectedCoverUser, setSelectedCoverUser] = useState<User | null>(currentUser || null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<PTOOverrideResponse | null>(null);
+    const [result, setResult] = useState<BulkOverrideResponse | null>(null);
 
-    // Count how many shifts the target user has in the selected range
-    const affectedShiftCount = React.useMemo(() => {
-        if (!targetUserId) {
-            return 0;
+    // Live preview from server
+    const [preview, setPreview] = useState<BulkOverridePreviewResponse | null>(null);
+    const [loadingPreview, setLoadingPreview] = useState(false);
+    const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Fetch live preview when target user + date range are set
+    const fetchPreview = useCallback(async (target: string, start: string, end: string) => {
+        if (!target || !start || !end) {
+            setPreview(null);
+            return;
         }
-        const start = new Date(startLocal);
-        const end = new Date(endLocal);
-        let count = 0;
-        for (const entry of entries) {
-            if (entry.user.id !== targetUserId) {
-                continue;
-            }
-            const entryStart = new Date(entry.start);
-            const entryEnd = new Date(entry.end);
-            // Shift overlaps with the selected range
-            if (entryStart < end && entryEnd > start) {
-                count++;
-            }
+
+        const startISO = new Date(start).toISOString();
+        const endISO = new Date(end).toISOString();
+
+        if (new Date(endISO) <= new Date(startISO)) {
+            setPreview(null);
+            return;
         }
-        return count;
-    }, [targetUserId, startLocal, endLocal, entries]);
+
+        setLoadingPreview(true);
+        try {
+            const data = await client.getBulkOverridePreview(scheduleId, startISO, endISO, target);
+            setPreview(data);
+        } catch {
+            setPreview(null);
+        } finally {
+            setLoadingPreview(false);
+        }
+    }, [scheduleId]);
+
+    // Debounce preview fetches when inputs change
+    useEffect(() => {
+        if (previewDebounceRef.current) {
+            clearTimeout(previewDebounceRef.current);
+        }
+        previewDebounceRef.current = setTimeout(() => {
+            fetchPreview(targetUserId, startLocal, endLocal);
+        }, 500);
+
+        return () => {
+            if (previewDebounceRef.current) {
+                clearTimeout(previewDebounceRef.current);
+            }
+        };
+    }, [targetUserId, startLocal, endLocal, fetchPreview]);
 
     const searchUsers = useCallback(async (query: string) => {
         if (!query || query.length < 2) {
@@ -107,10 +132,10 @@ export const PTOOverrideDialog: React.FC<Props> = ({
         setCoverQuery(value);
         setSelectedCoverUser(null);
         setCoverUserId('');
-        if (debounceRef.current) {
-            clearTimeout(debounceRef.current);
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
         }
-        debounceRef.current = setTimeout(() => searchUsers(value), 300);
+        searchDebounceRef.current = setTimeout(() => searchUsers(value), 300);
     };
 
     const handleSelectCoverUser = (user: User) => {
@@ -122,7 +147,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
     const handleSubmit = async () => {
         if (!targetUserId) {
-            setError('Please select the person going on PTO');
+            setError('Please select the person to override');
             return;
         }
         if (!coverUserId) {
@@ -130,7 +155,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
             return;
         }
         if (targetUserId === coverUserId) {
-            setError('Cover person must be different from the PTO person');
+            setError('Cover person must be different from the person being overridden');
             return;
         }
 
@@ -140,13 +165,13 @@ export const PTOOverrideDialog: React.FC<Props> = ({
         setSubmitting(true);
         setError(null);
         try {
-            const response = await client.createPTOOverride(scheduleId, start, end, targetUserId, coverUserId);
+            const response = await client.createBulkOverride(scheduleId, start, end, targetUserId, coverUserId);
             setResult(response);
             if (response.created > 0) {
                 onSuccess(response);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create PTO overrides');
+            setError(err instanceof Error ? err.message : 'Failed to create overrides');
         } finally {
             setSubmitting(false);
         }
@@ -154,8 +179,11 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
     useEffect(() => {
         return () => {
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current);
+            if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
+            }
+            if (previewDebounceRef.current) {
+                clearTimeout(previewDebounceRef.current);
             }
         };
     }, []);
@@ -181,7 +209,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
     return (
         <div
-            className='pto-override-dialog-overlay'
+            className='bulk-override-dialog-overlay'
             style={{
                 position: 'fixed',
                 top: 0,
@@ -197,7 +225,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
             onClick={onClose}
         >
             <div
-                className='pto-override-dialog'
+                className='bulk-override-dialog'
                 style={{
                     backgroundColor: theme.centerChannelBg,
                     borderRadius: '8px',
@@ -210,7 +238,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
                 onClick={(e) => e.stopPropagation()}
             >
                 <h3 style={{margin: '0 0 4px 0', color: theme.centerChannelColor, fontSize: '16px'}}>
-                    {'PTO Override'}
+                    {'Bulk Override'}
                 </h3>
                 <div style={{fontSize: '12px', color: theme.centerChannelColor, opacity: 0.6, marginBottom: '16px'}}>
                     {`Override all shifts for a person on ${scheduleName}`}
@@ -263,9 +291,9 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
                 {!result && (
                     <>
-                        {/* Person going on PTO */}
+                        {/* Person to override */}
                         <label style={{display: 'block', marginBottom: '12px'}}>
-                            <span style={labelStyle}>{'Person on PTO'}</span>
+                            <span style={labelStyle}>{'Person to override'}</span>
                             <select
                                 value={targetUserId}
                                 onChange={(e) => setTargetUserId(e.target.value)}
@@ -306,7 +334,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
                                 )}
                                 {showDropdown && searchResults.length > 0 && (
                                     <div
-                                        className='pto-user-dropdown'
+                                        className='bulk-override-user-dropdown'
                                         style={{
                                             position: 'absolute',
                                             top: '100%',
@@ -350,7 +378,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
                         {/* Start date */}
                         <label style={{display: 'block', marginBottom: '12px'}}>
-                            <span style={labelStyle}>{'PTO starts'}</span>
+                            <span style={labelStyle}>{'Start'}</span>
                             <input
                                 type='datetime-local'
                                 value={startLocal}
@@ -361,7 +389,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
 
                         {/* End date */}
                         <label style={{display: 'block', marginBottom: '12px'}}>
-                            <span style={labelStyle}>{'PTO ends'}</span>
+                            <span style={labelStyle}>{'End'}</span>
                             <input
                                 type='datetime-local'
                                 value={endLocal}
@@ -370,10 +398,10 @@ export const PTOOverrideDialog: React.FC<Props> = ({
                             />
                         </label>
 
-                        {/* Shift count preview */}
+                        {/* Live shift count preview from server */}
                         {targetUserId && (
                             <div
-                                className='pto-shift-preview'
+                                className='bulk-override-shift-preview'
                                 style={{
                                     backgroundColor: `${theme.centerChannelColor}08`,
                                     padding: '10px 12px',
@@ -383,14 +411,22 @@ export const PTOOverrideDialog: React.FC<Props> = ({
                                     color: theme.centerChannelColor,
                                 }}
                             >
-                                {affectedShiftCount === 0 ? (
+                                {loadingPreview && (
+                                    <span style={{opacity: 0.6}}>{'Loading shift preview...'}</span>
+                                )}
+                                {!loadingPreview && preview && preview.total_shifts === 0 && (
                                     <span style={{opacity: 0.6}}>
-                                        {'No shifts found in the selected range. The server will check the full schedule.'}
+                                        {'No shifts found for this person in the selected date range.'}
                                     </span>
-                                ) : (
+                                )}
+                                {!loadingPreview && preview && preview.total_shifts > 0 && (
                                     <span>
-                                        {`${affectedShiftCount} shift${affectedShiftCount !== 1 ? 's' : ''} will be overridden in the visible 48h window. `}
-                                        <span style={{opacity: 0.6}}>{'The full date range will be checked server-side.'}</span>
+                                        {`${preview.total_shifts} shift${preview.total_shifts !== 1 ? 's' : ''} will be overridden.`}
+                                    </span>
+                                )}
+                                {!loadingPreview && !preview && (
+                                    <span style={{opacity: 0.6}}>
+                                        {'Select a valid date range to preview affected shifts.'}
                                     </span>
                                 )}
                             </div>
@@ -430,7 +466,7 @@ export const PTOOverrideDialog: React.FC<Props> = ({
                                 opacity: submitting || !targetUserId || !coverUserId ? 0.6 : 1,
                             }}
                         >
-                            {submitting ? 'Creating overrides...' : 'Create PTO Override'}
+                            {submitting ? 'Creating overrides...' : 'Create Bulk Override'}
                         </button>
                     )}
                 </div>
@@ -439,4 +475,6 @@ export const PTOOverrideDialog: React.FC<Props> = ({
     );
 };
 
-export default PTOOverrideDialog;
+// Keep backward-compatible export name (file was originally named pto_override_dialog)
+export const PTOOverrideDialog = BulkOverrideDialog;
+export default BulkOverrideDialog;
