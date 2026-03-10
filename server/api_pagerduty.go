@@ -582,6 +582,7 @@ func (p *Plugin) handleCreateOverride(w http.ResponseWriter, r *http.Request) {
 // CreateBulkOverrideRequest represents the request body for creating bulk overrides.
 // It finds all shifts for the target user within the date range and creates overrides for each.
 type CreateBulkOverrideRequest struct {
+	ScheduleID   string `json:"schedule_id"`
 	Start        string `json:"start"`
 	End          string `json:"end"`
 	TargetUserID string `json:"target_user_id"`
@@ -688,25 +689,15 @@ func (p *Plugin) getTargetEntries(w http.ResponseWriter, r *http.Request, pdClie
 func (p *Plugin) handleBulkOverridePreview(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleBulkOverridePreview called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	vars := mux.Vars(r)
-	scheduleID := vars["id"]
-	if scheduleID == "" {
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.bulk_override.schedule.missing",
-			Message:    "Schedule ID is required",
-			StatusCode: http.StatusBadRequest,
-		})
-		return
-	}
-
+	scheduleID := r.URL.Query().Get("schedule_id")
 	startStr := r.URL.Query().Get("start")
 	endStr := r.URL.Query().Get("end")
 	targetUserID := r.URL.Query().Get("target_user_id")
 
-	if startStr == "" || endStr == "" || targetUserID == "" {
+	if scheduleID == "" || startStr == "" || endStr == "" || targetUserID == "" {
 		p.handleError(w, r, &APIError{
 			ID:         "api.pagerduty.bulk_override.fields.missing",
-			Message:    "start, end, and target_user_id query parameters are required",
+			Message:    "schedule_id, start, end, and target_user_id query parameters are required",
 			StatusCode: http.StatusBadRequest,
 		})
 		return
@@ -751,17 +742,6 @@ func (p *Plugin) handleBulkOverridePreview(w http.ResponseWriter, r *http.Reques
 func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request) {
 	p.client.Log.Debug("handleCreateBulkOverride called", "user_id", r.Header.Get("Mattermost-User-ID"))
 
-	vars := mux.Vars(r)
-	scheduleID := vars["id"]
-	if scheduleID == "" {
-		p.handleError(w, r, &APIError{
-			ID:         "api.pagerduty.bulk_override.schedule.missing",
-			Message:    "Schedule ID is required",
-			StatusCode: http.StatusBadRequest,
-		})
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var req CreateBulkOverrideRequest
@@ -774,14 +754,16 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.Start == "" || req.End == "" || req.TargetUserID == "" || req.CoverUserID == "" {
+	if req.ScheduleID == "" || req.Start == "" || req.End == "" || req.TargetUserID == "" || req.CoverUserID == "" {
 		p.handleError(w, r, &APIError{
 			ID:         "api.pagerduty.bulk_override.fields.missing",
-			Message:    "Start, end, target_user_id, and cover_user_id are required",
+			Message:    "schedule_id, start, end, target_user_id, and cover_user_id are required",
 			StatusCode: http.StatusBadRequest,
 		})
 		return
 	}
+
+	scheduleID := req.ScheduleID
 
 	startTime, endTime, ok := p.parseBulkOverrideDateRange(w, r, req.Start, req.End)
 	if !ok {

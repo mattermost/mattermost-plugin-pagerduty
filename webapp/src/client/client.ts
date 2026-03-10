@@ -178,15 +178,16 @@ export class Client {
     }
 
     async getBulkOverridePreview(scheduleId: string, start: string, end: string, targetUserId: string): Promise<BulkOverridePreviewResponse> {
-        const params = new URLSearchParams({start, end, target_user_id: targetUserId});
-        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/bulk-override/preview?${params.toString()}`);
+        const params = new URLSearchParams({schedule_id: scheduleId, start, end, target_user_id: targetUserId});
+        const response = await this.doFetch(`${this.baseUrl}/bulk-override/preview?${params.toString()}`);
         return response.json();
     }
 
     async createBulkOverride(scheduleId: string, start: string, end: string, targetUserId: string, coverUserId: string): Promise<BulkOverrideResponse> {
-        const response = await this.doFetch(`${this.baseUrl}/schedules/${scheduleId}/bulk-override`, {
+        const response = await this.doFetch(`${this.baseUrl}/bulk-override`, {
             method: 'POST',
             body: JSON.stringify({
+                schedule_id: scheduleId,
                 start,
                 end,
                 target_user_id: targetUserId,

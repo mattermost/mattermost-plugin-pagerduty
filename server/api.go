@@ -38,8 +38,8 @@ func (p *Plugin) initRouter() *mux.Router {
 	authRouter.HandleFunc("/users/me", p.handleGetCurrentUser).Methods(http.MethodGet)
 	authRouter.HandleFunc("/users", p.handleGetUsers).Methods(http.MethodGet)
 	authRouter.HandleFunc("/schedules/{id}/overrides", p.handleCreateOverride).Methods(http.MethodPost)
-	authRouter.HandleFunc("/schedules/{id}/bulk-override/preview", p.handleBulkOverridePreview).Methods(http.MethodGet)
-	authRouter.HandleFunc("/schedules/{id}/bulk-override", p.handleCreateBulkOverride).Methods(http.MethodPost)
+	authRouter.HandleFunc("/bulk-override/preview", p.handleBulkOverridePreview).Methods(http.MethodGet)
+	authRouter.HandleFunc("/bulk-override", p.handleCreateBulkOverride).Methods(http.MethodPost)
 
 	// Subscription management endpoints
 	authRouter.HandleFunc("/subscriptions", p.handleGetSubscriptions).Methods(http.MethodGet)
