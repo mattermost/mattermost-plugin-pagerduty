@@ -215,6 +215,32 @@ export interface OverrideResponse {
     override: Override;
 }
 
+export interface BulkOverrideResult {
+    start: string;
+    end: string;
+    success: boolean;
+    error?: string;
+}
+
+export interface BulkOverrideResponse {
+    total_shifts: number;
+    created: number;
+    failed: number;
+    results: BulkOverrideResult[];
+}
+
+export interface BulkOverridePreviewShift {
+    start: string;
+    end: string;
+    user_id: string;
+    user_name: string;
+}
+
+export interface BulkOverridePreviewResponse {
+    total_shifts: number;
+    shifts: BulkOverridePreviewShift[];
+}
+
 // --- Channel Subscriptions ---
 
 export interface ChannelSubscription {

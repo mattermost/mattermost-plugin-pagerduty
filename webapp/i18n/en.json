@@ -47,5 +47,19 @@
     "pagerduty.sidebar.override.creating": "Creating...",
     "pagerduty.sidebar.override.cancel": "Cancel",
     "pagerduty.sidebar.override.success": "Override created successfully",
-    "pagerduty.sidebar.override.shiftTaken": "Shift taken successfully"
+    "pagerduty.sidebar.override.shiftTaken": "Shift taken successfully",
+    "pagerduty.sidebar.bulkOverride.title": "Bulk Override",
+    "pagerduty.sidebar.bulkOverride.description": "Override all shifts for a person on {scheduleName}",
+    "pagerduty.sidebar.bulkOverride.personToOverride": "Person to override",
+    "pagerduty.sidebar.bulkOverride.selectPerson": "Select person...",
+    "pagerduty.sidebar.bulkOverride.coveringPerson": "Covering person",
+    "pagerduty.sidebar.bulkOverride.start": "Start",
+    "pagerduty.sidebar.bulkOverride.end": "End",
+    "pagerduty.sidebar.bulkOverride.create": "Create Bulk Override",
+    "pagerduty.sidebar.bulkOverride.creating": "Creating overrides...",
+    "pagerduty.sidebar.bulkOverride.loadingPreview": "Loading shift preview...",
+    "pagerduty.sidebar.bulkOverride.noShifts": "No shifts found for this person in the selected date range.",
+    "pagerduty.sidebar.bulkOverride.shiftCount": "{count} shift(s) will be overridden.",
+    "pagerduty.sidebar.bulkOverride.success": "Bulk override complete: {count} shift(s) overridden",
+    "pagerduty.sidebar.bulkOverride.partial": "Bulk override: {created} created, {failed} failed"
 }

@@ -5,9 +5,10 @@ import React, {useEffect, useRef, useState} from 'react';
 
 import {OverrideDialog} from './override_dialog';
 import {PagingDialog} from './paging_dialog';
+import {BulkOverrideDialog} from './pto_override_dialog';
 
 import client from '@/client/client';
-import type {Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
+import type {BulkOverrideResponse, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -29,6 +30,9 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     const [showOverrideDialog, setShowOverrideDialog] = useState(false);
     const [overrideEntry, setOverrideEntry] = useState<{start: string; end: string} | null>(null);
     const [takingShift, setTakingShift] = useState<string | null>(null);
+
+    // Bulk override state
+    const [showBulkOverrideDialog, setShowBulkOverrideDialog] = useState(false);
 
     useEffect(() => {
         return () => {
@@ -130,16 +134,18 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
         }
     };
 
-    const handlePagingSuccess = (incident: CreateIncidentResponse) => {
-        setSuccessMessage(`Incident created: ${incident.incident.title}`);
-        setShowPagingDialog(false);
-        setPagingTarget(null);
-
-        // Clear success message after 5 seconds
+    const showTemporarySuccess = (msg: string, durationMs = 5000) => {
+        setSuccessMessage(msg);
         if (successTimeoutRef.current) {
             clearTimeout(successTimeoutRef.current);
         }
-        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), durationMs);
+    };
+
+    const handlePagingSuccess = (incident: CreateIncidentResponse) => {
+        showTemporarySuccess(`Incident created: ${incident.incident.title}`);
+        setShowPagingDialog(false);
+        setPagingTarget(null);
     };
 
     const handleClosePagingDialog = () => {
@@ -158,11 +164,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
             const now = new Date();
             const start = new Date(entryStart) <= now ? now.toISOString() : entryStart;
             await client.createOverride(schedule.id, start, entryEnd, currentUser.id);
-            setSuccessMessage('Shift taken successfully');
-            if (successTimeoutRef.current) {
-                clearTimeout(successTimeoutRef.current);
-            }
-            successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+            showTemporarySuccess('Shift taken successfully');
             if (onOverrideCreated) {
                 onOverrideCreated();
             }
@@ -184,11 +186,17 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     const handleOverrideSuccess = () => {
         setShowOverrideDialog(false);
         setOverrideEntry(null);
-        setSuccessMessage('Override created successfully');
-        if (successTimeoutRef.current) {
-            clearTimeout(successTimeoutRef.current);
+        showTemporarySuccess('Override created successfully');
+        if (onOverrideCreated) {
+            onOverrideCreated();
         }
-        successTimeoutRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+    };
+
+    const handleBulkOverrideSuccess = (response: BulkOverrideResponse) => {
+        const msg = response.failed === 0
+            ? `Bulk override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
+            : `Bulk override: ${response.created} created, ${response.failed} failed`;
+        showTemporarySuccess(msg, 8000);
         if (onOverrideCreated) {
             onOverrideCreated();
         }
@@ -263,17 +271,39 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                 </div>
             )}
 
-            <h4
-                className='schedule-section-title'
-                style={{
-                    color: theme.centerChannelColor,
-                    margin: '0 0 12px 0',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                }}
-            >
-                {schedule.name}
-            </h4>
+            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px'}}>
+                <h4
+                    className='schedule-section-title'
+                    style={{
+                        color: theme.centerChannelColor,
+                        margin: 0,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                    }}
+                >
+                    {schedule.name}
+                </h4>
+                {currentUser && (
+                    <button
+                        className='bulk-override-button'
+                        onClick={() => setShowBulkOverrideDialog(true)}
+                        aria-label='Bulk Override'
+                        style={{
+                            backgroundColor: 'transparent',
+                            color: theme.linkColor,
+                            border: `1px solid ${theme.linkColor}40`,
+                            borderRadius: '4px',
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap' as const,
+                        }}
+                    >
+                        {'Bulk Override'}
+                    </button>
+                )}
+            </div>
 
             {!schedule.final_schedule && (
                 <div
@@ -499,6 +529,18 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                         setOverrideEntry(null);
                     }}
                     onSuccess={handleOverrideSuccess}
+                />
+            )}
+
+            {showBulkOverrideDialog && schedule && (
+                <BulkOverrideDialog
+                    theme={theme}
+                    scheduleId={schedule.id}
+                    scheduleName={schedule.name}
+                    entries={entries}
+                    currentUser={currentUser}
+                    onClose={() => setShowBulkOverrideDialog(false)}
+                    onSuccess={handleBulkOverrideSuccess}
                 />
             )}
         </div>

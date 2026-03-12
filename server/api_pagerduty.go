@@ -579,6 +579,277 @@ func (p *Plugin) handleCreateOverride(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CreateBulkOverrideRequest represents the request body for creating bulk overrides.
+// It finds all shifts for the target user within the date range and creates overrides for each.
+type CreateBulkOverrideRequest struct {
+	ScheduleID   string `json:"schedule_id"`
+	Start        string `json:"start"`
+	End          string `json:"end"`
+	TargetUserID string `json:"target_user_id"`
+	CoverUserID  string `json:"cover_user_id"`
+}
+
+// BulkOverrideResult represents a single override result (success or failure).
+type BulkOverrideResult struct {
+	Start   string `json:"start"`
+	End     string `json:"end"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// BulkOverrideResponse is the response from a bulk override request.
+type BulkOverrideResponse struct {
+	TotalShifts int                  `json:"total_shifts"`
+	Created     int                  `json:"created"`
+	Failed      int                  `json:"failed"`
+	Results     []BulkOverrideResult `json:"results"`
+}
+
+// BulkOverridePreviewResponse is the response from a bulk override preview request.
+type BulkOverridePreviewResponse struct {
+	TotalShifts int                         `json:"total_shifts"`
+	Shifts      []BulkOverridePreviewShift  `json:"shifts"`
+}
+
+// BulkOverridePreviewShift represents a single shift that would be overridden.
+type BulkOverridePreviewShift struct {
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
+}
+
+// parseBulkOverrideDateRange parses and validates the start/end query params or JSON fields for bulk override endpoints.
+func (p *Plugin) parseBulkOverrideDateRange(w http.ResponseWriter, r *http.Request, startStr, endStr string) (time.Time, time.Time, bool) {
+	startTime, err := time.Parse(time.RFC3339, startStr)
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.start.invalid",
+			Message:    "Start must be a valid RFC3339 timestamp",
+			StatusCode: http.StatusBadRequest,
+		})
+		return time.Time{}, time.Time{}, false
+	}
+
+	endTime, err := time.Parse(time.RFC3339, endStr)
+	if err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.end.invalid",
+			Message:    "End must be a valid RFC3339 timestamp",
+			StatusCode: http.StatusBadRequest,
+		})
+		return time.Time{}, time.Time{}, false
+	}
+
+	if !endTime.After(startTime) {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.range.invalid",
+			Message:    "End time must be after start time",
+			StatusCode: http.StatusBadRequest,
+		})
+		return time.Time{}, time.Time{}, false
+	}
+
+	if endTime.Sub(startTime) > 30*24*time.Hour {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.range.too_long",
+			Message:    "Override range cannot exceed 30 days",
+			StatusCode: http.StatusBadRequest,
+		})
+		return time.Time{}, time.Time{}, false
+	}
+
+	return startTime, endTime, true
+}
+
+// getTargetEntries fetches the schedule and filters entries for the target user.
+func (p *Plugin) getTargetEntries(w http.ResponseWriter, r *http.Request, pdClient *pagerduty.Client, scheduleID string, startTime, endTime time.Time, targetUserID string) ([]pagerduty.RenderedScheduleEntry, bool) {
+	schedule, err := pdClient.GetSchedule(scheduleID, startTime, endTime)
+	if err != nil {
+		p.client.Log.Error("Failed to get schedule for bulk override", "error", err.Error(), "schedule_id", scheduleID)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.schedule.error",
+			Message:    "Failed to retrieve schedule for the given date range",
+			StatusCode: http.StatusInternalServerError,
+		})
+		return nil, false
+	}
+
+	var targetEntries []pagerduty.RenderedScheduleEntry
+	if schedule.Schedule.FinalSchedule != nil {
+		for _, entry := range schedule.Schedule.FinalSchedule.RenderedScheduleEntries {
+			if entry.User.ID == targetUserID {
+				targetEntries = append(targetEntries, entry)
+			}
+		}
+	}
+	return targetEntries, true
+}
+
+func (p *Plugin) handleBulkOverridePreview(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleBulkOverridePreview called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	scheduleID := r.URL.Query().Get("schedule_id")
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
+	targetUserID := r.URL.Query().Get("target_user_id")
+
+	if scheduleID == "" || startStr == "" || endStr == "" || targetUserID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.fields.missing",
+			Message:    "schedule_id, start, end, and target_user_id query parameters are required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	startTime, endTime, ok := p.parseBulkOverrideDateRange(w, r, startStr, endStr)
+	if !ok {
+		return
+	}
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	targetEntries, ok := p.getTargetEntries(w, r, pdClient, scheduleID, startTime, endTime, targetUserID)
+	if !ok {
+		return
+	}
+
+	shifts := make([]BulkOverridePreviewShift, 0, len(targetEntries))
+	for _, entry := range targetEntries {
+		shifts = append(shifts, BulkOverridePreviewShift{
+			Start:    entry.Start,
+			End:      entry.End,
+			UserID:   entry.User.ID,
+			UserName: entry.User.Summary,
+		})
+	}
+
+	resp := BulkOverridePreviewResponse{
+		TotalShifts: len(shifts),
+		Shifts:      shifts,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+		p.client.Log.Error("Failed to encode bulk override preview response", "error", encErr.Error())
+	}
+}
+
+func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request) {
+	p.client.Log.Debug("handleCreateBulkOverride called", "user_id", r.Header.Get("Mattermost-User-ID"))
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req CreateBulkOverrideRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.decode.error",
+			Message:    "Invalid request body",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	if req.ScheduleID == "" || req.Start == "" || req.End == "" || req.TargetUserID == "" || req.CoverUserID == "" {
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.bulk_override.fields.missing",
+			Message:    "schedule_id, start, end, target_user_id, and cover_user_id are required",
+			StatusCode: http.StatusBadRequest,
+		})
+		return
+	}
+
+	startTime, endTime, ok := p.parseBulkOverrideDateRange(w, r, req.Start, req.End)
+	if !ok {
+		return
+	}
+
+	pdClient := p.handleGetPagerDutyClient(w, r)
+	if pdClient == nil {
+		return
+	}
+
+	targetEntries, ok := p.getTargetEntries(w, r, pdClient, req.ScheduleID, startTime, endTime, req.TargetUserID)
+	if !ok {
+		return
+	}
+
+	if len(targetEntries) == 0 {
+		p.client.Log.Debug("No shifts found for target user in override range", "schedule_id", req.ScheduleID, "target_user_id", req.TargetUserID)
+		resp := BulkOverrideResponse{
+			TotalShifts: 0,
+			Created:     0,
+			Failed:      0,
+			Results:     []BulkOverrideResult{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+			p.client.Log.Error("Failed to encode bulk override response", "error", encErr.Error())
+		}
+		return
+	}
+
+	var results []BulkOverrideResult
+	created := 0
+	failed := 0
+
+	for _, entry := range targetEntries {
+		_, overrideErr := pdClient.CreateOverride(req.ScheduleID, entry.Start, entry.End, req.CoverUserID)
+		if overrideErr != nil {
+			p.client.Log.Warn("Failed to create bulk override for shift",
+				"error", overrideErr.Error(),
+				"schedule_id", req.ScheduleID,
+				"start", entry.Start,
+				"end", entry.End,
+			)
+			results = append(results, BulkOverrideResult{
+				Start:   entry.Start,
+				End:     entry.End,
+				Success: false,
+				Error:   overrideErr.Error(),
+			})
+			failed++
+		} else {
+			results = append(results, BulkOverrideResult{
+				Start:   entry.Start,
+				End:     entry.End,
+				Success: true,
+			})
+			created++
+		}
+	}
+
+	p.client.Log.Debug("Bulk override completed",
+		"schedule_id", req.ScheduleID,
+		"total_shifts", len(targetEntries),
+		"created", created,
+		"failed", failed,
+	)
+
+	resp := BulkOverrideResponse{
+		TotalShifts: len(targetEntries),
+		Created:     created,
+		Failed:      failed,
+		Results:     results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	statusCode := http.StatusCreated
+	if failed > 0 && created == 0 {
+		statusCode = http.StatusInternalServerError
+	} else if failed > 0 {
+		statusCode = http.StatusMultiStatus
+	}
+	w.WriteHeader(statusCode)
+	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+		p.client.Log.Error("Failed to encode bulk override response", "error", encErr.Error())
+	}
+}
+
 // CreateIncidentNoteAPIRequest represents the API request for adding a note
 type CreateIncidentNoteAPIRequest struct {
 	Content string `json:"content"`
