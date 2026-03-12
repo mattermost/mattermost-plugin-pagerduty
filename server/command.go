@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -415,14 +416,7 @@ func (p *Plugin) saveSubscription(sub *ChannelSubscription) error {
 	}
 
 	// Add to index if not already present
-	found := false
-	for _, id := range index {
-		if id == sub.ChannelID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(index, sub.ChannelID) {
 		index = append(index, sub.ChannelID)
 		if err := p.kvstore.SetSubscriptionIndex(index); err != nil {
 			return errors.Wrap(err, "failed to update subscription index")
@@ -468,13 +462,7 @@ func ephemeral(text string) *model.CommandResponse {
 }
 
 func isValidEventType(eventType string) bool {
-	for _, et := range AllEventTypes {
-		if et == eventType {
-			return true
-		}
-	}
-	// Also accept reassigned
-	return eventType == EventIncidentReassigned
+	return slices.Contains(AllEventTypes, eventType) || eventType == EventIncidentReassigned
 }
 
 func boolEmoji(b bool) string {

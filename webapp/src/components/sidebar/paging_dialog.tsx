@@ -77,7 +77,7 @@ export const PagingDialog: React.FC<PagingDialogProps> = ({theme, targetType, ta
 
         try {
             const assigneeIds = targetType === 'user' ? [target.id] : [];
-            const incident = await client.createIncident(title, description, selectedServiceId, assigneeIds);
+            const incident = await client.createIncident(title, description, selectedServiceId, undefined, assigneeIds);
             onSuccess(incident);
             onClose();
         } catch (err) {

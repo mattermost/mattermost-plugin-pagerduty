@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -76,14 +77,7 @@ func (p *Plugin) routeToSubscribedChannels(eventType string, serviceIDs []string
 // subscriptionMatchesEvent checks whether a channel subscription matches an event.
 func (p *Plugin) subscriptionMatchesEvent(sub *ChannelSubscription, eventType string, serviceIDs []string) bool {
 	// Check event type match
-	typeMatch := false
-	for _, et := range sub.EventTypes {
-		if et == eventType {
-			typeMatch = true
-			break
-		}
-	}
-	if !typeMatch {
+	if !slices.Contains(sub.EventTypes, eventType) {
 		return false
 	}
 

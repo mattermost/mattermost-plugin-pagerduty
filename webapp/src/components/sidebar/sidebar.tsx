@@ -887,11 +887,11 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                                     {'\u2190 Back to schedules'}
                                 </button>
                                 <ScheduleDetails
-                                schedule={selectedSchedule}
-                                onBack={handleBack}
-                                theme={theme}
-                                loading={loadingDetails}
-                                currentUser={currentUser || undefined}
+                                    schedule={selectedSchedule}
+                                    onBack={handleBack}
+                                    theme={theme}
+                                    loading={loadingDetails}
+                                    currentUser={currentUser || undefined}
                                     onOverrideCreated={() => {
                                         if (selectedSchedule) {
                                             handleScheduleClick(selectedSchedule.id);

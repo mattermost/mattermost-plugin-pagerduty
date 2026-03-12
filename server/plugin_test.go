@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -168,10 +169,13 @@ func (m *mockKVStore) DeleteOAuthState(state string) error {
 	return nil
 }
 
-func setupMockAPIForActivation(api *plugintest.API, siteURL string) { //nolint:unparam
+func setupMockAPIForActivation(t *testing.T, api *plugintest.API, siteURL string) { //nolint:unparam
+	t.Helper()
 	// Create the assets directory and a minimal profile image for EnsureBot
-	_ = os.MkdirAll("/tmp/plugin/assets", 0o755)
-	_ = os.WriteFile("/tmp/plugin/assets/profile.png", []byte{0x89, 0x50, 0x4E, 0x47}, 0o644)
+	bundleDir := t.TempDir()
+	assetsDir := filepath.Join(bundleDir, "assets")
+	_ = os.MkdirAll(assetsDir, 0o755)
+	_ = os.WriteFile(filepath.Join(assetsDir, "profile.png"), []byte{0x89, 0x50, 0x4E, 0x47}, 0o600)
 
 	api.On("GetConfig").Return(&model.Config{
 		ServiceSettings: model.ServiceSettings{
@@ -187,7 +191,7 @@ func setupMockAPIForActivation(api *plugintest.API, siteURL string) { //nolint:u
 
 	// Bot setup mocks
 	api.On("GetServerVersion").Return("7.0.0")
-	api.On("GetBundlePath").Return("/tmp/plugin", nil).Maybe()
+	api.On("GetBundlePath").Return(bundleDir, nil).Maybe()
 	api.On("KVGet", mock.Anything).Return(nil, nil).Maybe()
 	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
 	api.On("EnsureBotUser", mock.Anything).Return("bot-user-id", nil).Maybe()
@@ -204,7 +208,7 @@ func TestPlugin_OnActivate(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		setupMockAPIForActivation(api, "http://localhost:8065")
+		setupMockAPIForActivation(t, api, "http://localhost:8065")
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)
@@ -451,7 +455,7 @@ func TestPlugin_Integration(t *testing.T) {
 		api := &plugintest.API{}
 		defer api.AssertExpectations(t)
 
-		setupMockAPIForActivation(api, "http://localhost:8065")
+		setupMockAPIForActivation(t, api, "http://localhost:8065")
 
 		plugin := &Plugin{}
 		plugin.SetAPI(api)

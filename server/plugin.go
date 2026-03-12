@@ -137,7 +137,11 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 // ServeHTTP handles HTTP requests to the plugin.
 func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	if p.router == nil {
-		http.Error(w, "Plugin not initialized", http.StatusServiceUnavailable)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.not_initialized",
+			Message:    "Plugin not initialized",
+			StatusCode: http.StatusServiceUnavailable,
+		})
 		return
 	}
 	p.router.ServeHTTP(w, r)

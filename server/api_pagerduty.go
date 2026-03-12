@@ -607,8 +607,8 @@ type BulkOverrideResponse struct {
 
 // BulkOverridePreviewResponse is the response from a bulk override preview request.
 type BulkOverridePreviewResponse struct {
-	TotalShifts int                         `json:"total_shifts"`
-	Shifts      []BulkOverridePreviewShift  `json:"shifts"`
+	TotalShifts int                        `json:"total_shifts"`
+	Shifts      []BulkOverridePreviewShift `json:"shifts"`
 }
 
 // BulkOverridePreviewShift represents a single shift that would be overridden.

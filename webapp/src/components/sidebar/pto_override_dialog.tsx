@@ -280,7 +280,7 @@ export const BulkOverrideDialog: React.FC<Props> = ({
                             <span>{'No shifts found for this person in the selected date range.'}</span>
                         )}
                         {result.total_shifts > 0 && result.failed === 0 && (
-                            <span>{`Successfully overrode ${result.created} shift${result.created !== 1 ? 's' : ''}.`}</span>
+                            <span>{`Successfully overrode ${result.created} shift${result.created === 1 ? '' : 's'}.`}</span>
                         )}
                         {result.total_shifts > 0 && result.failed > 0 && (
                             <span>{`Created ${result.created} of ${result.total_shifts} overrides. ${result.failed} failed.`}</span>
@@ -420,7 +420,7 @@ export const BulkOverrideDialog: React.FC<Props> = ({
                                 )}
                                 {!loadingPreview && preview && preview.total_shifts > 0 && (
                                     <span>
-                                        {`${preview.total_shifts} shift${preview.total_shifts !== 1 ? 's' : ''} will be overridden.`}
+                                        {`${preview.total_shifts} shift${preview.total_shifts === 1 ? '' : 's'} will be overridden.`}
                                     </span>
                                 )}
                                 {!loadingPreview && !preview && (

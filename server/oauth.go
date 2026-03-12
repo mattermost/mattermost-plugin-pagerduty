@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,9 +21,9 @@ const (
 	pluginID = "com.svelle.pagerduty-plugin"
 
 	pagerDutyAuthURL  = "https://identity.pagerduty.com/oauth/authorize"
-	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token"
+	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token" //nolint:gosec // Not a credential
 
-	oauthScopes     = "schedules.read oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write"
+	oauthScopes      = "schedules.read oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write" //nolint:lll
 	oauthStateExpiry = 10 * time.Minute
 )
 
@@ -36,15 +37,17 @@ func (p *Plugin) handleOAuthConnect(w http.ResponseWriter, r *http.Request) {
 
 	config := p.getConfiguration()
 	if err := config.IsValid(); err != nil {
-		p.client.Log.Warn("Plugin configuration invalid for OAuth connect", "error", err)
-		http.Error(w, "Plugin not configured. Please contact your administrator.", http.StatusNotImplemented)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.oauth.not_configured",
+			Message:    "Plugin not configured. Please contact your administrator.",
+			StatusCode: http.StatusNotImplemented,
+		})
 		return
 	}
 
 	stateBytes := make([]byte, 32)
 	if _, err := rand.Read(stateBytes); err != nil {
-		p.client.Log.Error("Failed to generate OAuth state", "error", err.Error())
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		p.handleErrorWithCode(w, http.StatusInternalServerError, "Failed to generate OAuth state", err)
 		return
 	}
 	state := hex.EncodeToString(stateBytes)
@@ -54,15 +57,13 @@ func (p *Plugin) handleOAuthConnect(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().Add(oauthStateExpiry),
 	}
 	if err := p.kvstore.SetOAuthState(state, oauthState); err != nil {
-		p.client.Log.Error("Failed to store OAuth state", "error", err.Error())
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		p.handleErrorWithCode(w, http.StatusInternalServerError, "Failed to store OAuth state", err)
 		return
 	}
 
 	authURL, err := url.Parse(pagerDutyAuthURL)
 	if err != nil {
-		p.client.Log.Error("Failed to parse PagerDuty auth URL", "error", err.Error())
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		p.handleErrorWithCode(w, http.StatusInternalServerError, "Failed to parse PagerDuty auth URL", err)
 		return
 	}
 
@@ -161,7 +162,13 @@ func (p *Plugin) exchangeCodeForToken(code string) (*kvstore.OAuthToken, error) 
 	data.Set("code", code)
 	data.Set("redirect_uri", p.getOAuthRedirectURI())
 
-	resp, err := http.PostForm(pagerDutyTokenURL, data)
+	req, err := http.NewRequest(http.MethodPost, pagerDutyTokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create token request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to request token")
 	}
@@ -273,7 +280,13 @@ func (p *Plugin) refreshUserToken(userID string, token *kvstore.OAuthToken) (*kv
 	data.Set("client_secret", config.OAuthClientSecret)
 	data.Set("refresh_token", token.RefreshToken)
 
-	resp, err := http.PostForm(pagerDutyTokenURL, data)
+	req, err := http.NewRequest(http.MethodPost, pagerDutyTokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create refresh token request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to refresh token")
 	}
