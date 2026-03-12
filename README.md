@@ -73,6 +73,7 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
      - `incidents.write`
      - `oncalls.read`
      - `schedules.read`
+     - `schedules.write` (required for schedule overrides)
      - `services.read`
      - `users.read`
      - `webhook_subscriptions.read` (required for webhook setup)
@@ -163,7 +164,8 @@ The Incidents tab shows all triggered and acknowledged incidents:
 ### Schedule Overrides
 
 Create temporary schedule overrides from the timeline view:
-- **Quick Override**: Override a shift for a specific time window
+- **Quick Override**: Override a single shift for a specific time window
+- **Bulk Override**: Override all of a person's shifts across a date range (up to 30 days) — select from all schedule members, not just those currently on-call
 - **User Search**: Search for PagerDuty users to assign the override to
 - **Flexible Duration**: Set custom start and end times for the override
 
