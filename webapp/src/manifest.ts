@@ -7,8 +7,9 @@ const manifest = JSON.parse(`
     "description": "PagerDuty integration for Mattermost - View on-call schedules and current on-call users directly within Mattermost.",
     "homepage_url": "https://github.com/svelle/mattermost-pagerduty-plugin",
     "support_url": "https://github.com/svelle/mattermost-pagerduty-plugin/issues",
+    "release_notes_url": "https://github.com/svelle/mattermost-pagerduty-pluginreleases/tag/v2.2.0",
     "icon_path": "assets/pagerduty-icon.svg",
-    "version": "0.0.0+3a4c93e",
+    "version": "2.2.0+ed95ab6",
     "min_server_version": "6.2.1",
     "server": {
         "executables": {
