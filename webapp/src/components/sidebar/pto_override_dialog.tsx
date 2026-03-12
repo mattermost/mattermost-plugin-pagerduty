@@ -4,14 +4,14 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 import client from '@/client/client';
-import type {BulkOverridePreviewResponse, BulkOverrideResponse, ScheduleEntry, User} from '@/types/pagerduty';
+import type {BulkOverridePreviewResponse, BulkOverrideResponse, User, UserReference} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
     theme: Theme;
     scheduleId: string;
     scheduleName: string;
-    entries: ScheduleEntry[];
+    scheduleLayerUsers: UserReference[];
     currentUser?: User;
     onClose: () => void;
     onSuccess: (response: BulkOverrideResponse) => void;
@@ -26,21 +26,21 @@ export const BulkOverrideDialog: React.FC<Props> = ({
     theme,
     scheduleId,
     scheduleName,
-    entries,
+    scheduleLayerUsers,
     currentUser,
     onClose,
     onSuccess,
 }) => {
-    // Derive unique users from the schedule entries
+    // Deduplicate users from schedule layers (a user may appear in multiple layers)
     const scheduleUsers = React.useMemo(() => {
-        const seen = new Map<string, User>();
-        for (const entry of entries) {
-            if (entry.user && !seen.has(entry.user.id)) {
-                seen.set(entry.user.id, entry.user);
+        const seen = new Map<string, UserReference>();
+        for (const user of scheduleLayerUsers) {
+            if (user && !seen.has(user.id)) {
+                seen.set(user.id, user);
             }
         }
         return Array.from(seen.values());
-    }, [entries]);
+    }, [scheduleLayerUsers]);
 
     const [targetUserId, setTargetUserId] = useState('');
 
@@ -304,7 +304,7 @@ export const BulkOverrideDialog: React.FC<Props> = ({
                                         key={user.id}
                                         value={user.id}
                                     >
-                                        {user.name || user.summary}
+                                        {user.summary}
                                     </option>
                                 ))}
                             </select>
