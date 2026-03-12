@@ -12,6 +12,10 @@ export interface Schedule {
     final_schedule?: FinalSchedule;
 }
 
+export interface ScheduleLayerUser {
+    user: UserReference;
+}
+
 export interface ScheduleLayer {
     id: string;
     name: string;
@@ -19,7 +23,7 @@ export interface ScheduleLayer {
     end?: string;
     rotation_virtual_start: string;
     rotation_turn_length_seconds: number;
-    users: UserReference[];
+    users: ScheduleLayerUser[];
 }
 
 export interface OverrideSubcycle {

@@ -8,7 +8,7 @@ import {PagingDialog} from './paging_dialog';
 import {BulkOverrideDialog} from './pto_override_dialog';
 
 import client from '@/client/client';
-import type {BulkOverrideResponse, Schedule, User, UserReference, CreateIncidentResponse} from '@/types/pagerduty';
+import type {BulkOverrideResponse, Schedule, User, CreateIncidentResponse} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
 
 interface Props {
@@ -537,7 +537,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                     theme={theme}
                     scheduleId={schedule.id}
                     scheduleName={schedule.name}
-                    scheduleLayerUsers={(schedule.schedule_layers || []).flatMap((layer) => layer.users || [])}
+                    scheduleLayerUsers={(schedule.schedule_layers || []).flatMap((layer) => (layer.users || []).map((u) => u.user))}
                     currentUser={currentUser}
                     onClose={() => setShowBulkOverrideDialog(false)}
                     onSuccess={handleBulkOverrideSuccess}

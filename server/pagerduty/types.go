@@ -16,14 +16,20 @@ type Schedule struct {
 	FinalSchedule    FinalSchedule    `json:"final_schedule,omitempty"`
 }
 
+// ScheduleLayerUser wraps a UserReference as returned by the PagerDuty API
+// in the schedule_layers[].users array: [{"user": {"id": "...", ...}}]
+type ScheduleLayerUser struct {
+	User UserReference `json:"user"`
+}
+
 type ScheduleLayer struct {
-	ID                        string          `json:"id"`
-	Name                      string          `json:"name"`
-	Start                     time.Time       `json:"start"`
-	End                       *time.Time      `json:"end"`
-	RotationVirtualStart      time.Time       `json:"rotation_virtual_start"`
-	RotationTurnLengthSeconds int             `json:"rotation_turn_length_seconds"`
-	Users                     []UserReference `json:"users"`
+	ID                        string               `json:"id"`
+	Name                      string               `json:"name"`
+	Start                     time.Time            `json:"start"`
+	End                       *time.Time           `json:"end"`
+	RotationVirtualStart      time.Time            `json:"rotation_virtual_start"`
+	RotationTurnLengthSeconds int                  `json:"rotation_turn_length_seconds"`
+	Users                     []ScheduleLayerUser  `json:"users"`
 }
 
 type OverrideSubcycle struct {
