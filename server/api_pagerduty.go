@@ -796,9 +796,24 @@ func (p *Plugin) handleCreateBulkOverride(w http.ResponseWriter, r *http.Request
 	var results []BulkOverrideResult
 	created := 0
 	failed := 0
+	now := time.Now()
 
 	for _, entry := range targetEntries {
-		_, overrideErr := pdClient.CreateOverride(req.ScheduleID, entry.Start, entry.End, req.CoverUserID)
+		// For shifts already in progress, start the override from now instead of
+		// the original shift start — PagerDuty rejects overrides with past start times.
+		overrideStart := entry.Start
+		if entryStart, parseErr := time.Parse(time.RFC3339, entry.Start); parseErr == nil {
+			entryEnd, endParseErr := time.Parse(time.RFC3339, entry.End)
+			if endParseErr == nil && now.After(entryEnd) {
+				// Shift already ended, skip it
+				continue
+			}
+			if entryStart.Before(now) {
+				overrideStart = now.Format(time.RFC3339)
+			}
+		}
+
+		_, overrideErr := pdClient.CreateOverride(req.ScheduleID, overrideStart, entry.End, req.CoverUserID)
 		if overrideErr != nil {
 			p.client.Log.Warn("Failed to create bulk override for shift",
 				"error", overrideErr.Error(),
