@@ -23,7 +23,7 @@ const (
 	pagerDutyAuthURL  = "https://identity.pagerduty.com/oauth/authorize"
 	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token" //nolint:gosec // Not a credential
 
-	oauthScopes      = "schedules.read schedules.write oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write" //nolint:lll
+	oauthScopes      = "schedules.read schedules.write schedules_overrides.read schedules_overrides.write oncalls.read services.read incidents.read incidents.write users.read webhook_subscriptions.read webhook_subscriptions.write" //nolint:lll
 	oauthStateExpiry = 10 * time.Minute
 )
 
