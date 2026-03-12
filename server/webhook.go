@@ -22,7 +22,11 @@ const (
 // requests come from PagerDuty's servers.
 func (p *Plugin) handlePagerDutyWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.method_not_allowed",
+			Message:    "Method not allowed",
+			StatusCode: http.StatusMethodNotAllowed,
+		})
 		return
 	}
 
@@ -31,22 +35,34 @@ func (p *Plugin) handlePagerDutyWebhook(w http.ResponseWriter, r *http.Request) 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		p.client.Log.Error("Failed to read webhook body", "error", err.Error())
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.read_body",
+			Message:    "Failed to read body",
+			StatusCode: http.StatusBadRequest,
+		})
 		return
 	}
 
 	// Verify the webhook signature
 	if !p.verifyWebhookSignature(body, r.Header.Get(pagerDutySignatureHeader)) {
 		p.client.Log.Warn("Webhook signature verification failed")
-		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.invalid_signature",
+			Message:    "Invalid signature",
+			StatusCode: http.StatusUnauthorized,
+		})
 		return
 	}
 
 	// Parse the webhook payload
 	var payload pagerduty.WebhookPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		p.client.Log.Error("Failed to unmarshal webhook payload", "error", err.Error())
-		http.Error(w, "Invalid payload", http.StatusBadRequest)
+	if unmarshalErr := json.Unmarshal(body, &payload); unmarshalErr != nil {
+		p.client.Log.Error("Failed to unmarshal webhook payload", "error", unmarshalErr.Error())
+		p.handleError(w, r, &APIError{
+			ID:         "api.pagerduty.webhook.invalid_payload",
+			Message:    "Invalid payload",
+			StatusCode: http.StatusBadRequest,
+		})
 		return
 	}
 

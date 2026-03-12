@@ -43,9 +43,9 @@ const ScheduleList: React.FC<Props> = ({schedules, onScheduleClick, theme, loadi
         scheduleRefs.current = scheduleRefs.current.slice(0, schedules.length);
     }, [schedules.length]);
 
-    const filteredSchedules = searchQuery
-        ? schedules.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
-        : schedules;
+    const filteredSchedules = searchQuery ?
+        schedules.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase())) :
+        schedules;
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'ArrowDown') {

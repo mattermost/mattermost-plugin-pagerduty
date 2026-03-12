@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -72,19 +71,4 @@ func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-type APIError struct {
-	ID         string `json:"id"`
-	Message    string `json:"message"`
-	StatusCode int    `json:"-"`
-}
-
-func (p *Plugin) handleError(w http.ResponseWriter, r *http.Request, err *APIError) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(err.StatusCode)
-
-	if encErr := json.NewEncoder(w).Encode(err); encErr != nil {
-		p.client.Log.Error("Failed to encode error response", "error", encErr.Error())
-	}
 }

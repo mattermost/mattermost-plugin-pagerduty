@@ -193,9 +193,9 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
     };
 
     const handleBulkOverrideSuccess = (response: BulkOverrideResponse) => {
-        const msg = response.failed === 0
-            ? `Bulk override complete: ${response.created} shift${response.created !== 1 ? 's' : ''} overridden`
-            : `Bulk override: ${response.created} created, ${response.failed} failed`;
+        const msg = response.failed === 0 ?
+            `Bulk override complete: ${response.created} shift${response.created === 1 ? '' : 's'} overridden` :
+            `Bulk override: ${response.created} created, ${response.failed} failed`;
         showTemporarySuccess(msg, 8000);
         if (onOverrideCreated) {
             onOverrideCreated();
