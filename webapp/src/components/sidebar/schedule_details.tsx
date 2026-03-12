@@ -537,7 +537,7 @@ const ScheduleDetails: React.FC<Props> = ({schedule, theme, loading, currentUser
                     theme={theme}
                     scheduleId={schedule.id}
                     scheduleName={schedule.name}
-                    entries={entries}
+                    scheduleLayerUsers={(schedule.schedule_layers || []).flatMap((layer) => (layer.users || []).map((u) => u.user))}
                     currentUser={currentUser}
                     onClose={() => setShowBulkOverrideDialog(false)}
                     onSuccess={handleBulkOverrideSuccess}
