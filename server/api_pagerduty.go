@@ -951,9 +951,21 @@ type SubscriptionAPIRequest struct {
 }
 
 func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
 	channelID := r.URL.Query().Get("channel_id")
 
 	if channelID != "" {
+		// Verify the user is a member of the target channel before disclosing
+		// whether a subscription exists for it.
+		if _, err := p.client.Channel.GetMember(channelID, userID); err != nil {
+			p.handleError(w, r, &APIError{
+				ID:         "api.pagerduty.subscription.forbidden",
+				Message:    "You must be a member of the channel to view its subscriptions",
+				StatusCode: http.StatusForbidden,
+			})
+			return
+		}
+
 		// Get subscription for a specific channel
 		sub, err := p.kvstore.GetChannelSubscription(channelID)
 		if err != nil {
@@ -978,7 +990,7 @@ func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get all subscriptions
+	// Get all subscriptions, filtered to channels the caller is a member of.
 	index, err := p.kvstore.GetSubscriptionIndex()
 	if err != nil {
 		p.handleError(w, r, &APIError{
@@ -991,6 +1003,9 @@ func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) 
 
 	var subs []*ChannelSubscription
 	for _, chID := range index {
+		if _, memberErr := p.client.Channel.GetMember(chID, userID); memberErr != nil {
+			continue
+		}
 		sub, subErr := p.kvstore.GetChannelSubscription(chID)
 		if subErr != nil || sub == nil {
 			continue
