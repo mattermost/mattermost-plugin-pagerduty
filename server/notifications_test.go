@@ -153,6 +153,44 @@ func TestFormatIncidentNotification(t *testing.T) {
 		msg := p.formatIncidentNotification("unknown.event", incidentData)
 		assert.Empty(t, msg)
 	})
+
+	t.Run("markdown injection in incident fields is neutralized", func(t *testing.T) {
+		evil := &pagerduty.WebhookIncidentData{
+			Title:   "@channel click [here](https://evil.com)",
+			HTMLURL: "https://example.pagerduty.com/incidents/P123",
+			Service: pagerduty.ServiceReference{
+				ID:      "svc-1",
+				Summary: "**bold** *italic*",
+			},
+			Urgency: "high",
+			Assignees: []pagerduty.UserReference{
+				{ID: "u1", Summary: "@all"},
+			},
+			Description: "line1\n# fake header\n> fake quote",
+		}
+
+		msg := p.formatIncidentNotification(EventIncidentTriggered, evil)
+
+		assert.NotContains(t, msg, "[here](https://evil.com)", "attacker link must not render")
+		assert.NotContains(t, msg, "@channel ", "raw @channel mention must be broken")
+		assert.NotContains(t, msg, "@all,", "raw @all mention must be broken")
+		assert.NotContains(t, msg, "\n# fake header", "newline-injected header must be stripped")
+		assert.NotContains(t, msg, "\n> fake quote", "newline-injected blockquote must be stripped")
+		assert.Contains(t, msg, "\\[here\\]", "brackets in title must be escaped")
+		assert.Contains(t, msg, "\\*\\*bold\\*\\*", "asterisks in service summary must be escaped")
+	})
+
+	t.Run("non-http incident URL is rendered as plain text", func(t *testing.T) {
+		evil := &pagerduty.WebhookIncidentData{
+			Title:   "Server is down",
+			HTMLURL: "javascript:alert(1)",
+			Service: pagerduty.ServiceReference{ID: "svc-1", Summary: "API"},
+		}
+		msg := p.formatIncidentNotification(EventIncidentResolved, evil)
+		assert.NotContains(t, msg, "javascript:")
+		assert.NotContains(t, msg, "(javascript")
+		assert.Contains(t, msg, "Server is down")
+	})
 }
 
 func TestFormatAssignees(t *testing.T) {

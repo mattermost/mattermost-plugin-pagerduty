@@ -3,12 +3,55 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
 )
+
+// escapeMarkdown sanitizes user-controlled text from PagerDuty for inclusion in
+// Mattermost markdown messages. It neutralizes inline formatting characters,
+// breaks @-mentions to prevent notification injection (e.g. @channel/@all),
+// and replaces newlines so attacker-controlled text cannot start a new line
+// with a block-level marker like '#' or '>'.
+func escapeMarkdown(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "@", "@​")
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"`", "\\`",
+		"*", "\\*",
+		"_", "\\_",
+		"~", "\\~",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"!", "\\!",
+		"|", "\\|",
+		"<", "\\<",
+		">", "\\>",
+	)
+	return replacer.Replace(s)
+}
+
+// safeMarkdownLink renders [text](url). The text is markdown-escaped, and the
+// URL is validated to be http(s); if not, only the escaped text is returned.
+func safeMarkdownLink(text, rawURL string) string {
+	safeText := escapeMarkdown(text)
+	if rawURL == "" {
+		return safeText
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return safeText
+	}
+	return fmt.Sprintf("[%s](%s)", safeText, u.String())
+}
 
 // processWebhookEvent routes a PagerDuty webhook event to all matching channel subscriptions.
 func (p *Plugin) processWebhookEvent(event *pagerduty.WebhookEvent) {
@@ -124,24 +167,24 @@ func (p *Plugin) formatIncidentNotification(eventType string, data *pagerduty.We
 
 func (p *Plugin) formatIncidentTriggered(data *pagerduty.WebhookIncidentData) string {
 	assignees := formatAssignees(data.Assignees)
-	msg := fmt.Sprintf("#### :rotating_light: Incident Triggered\n**[%s](%s)**\n**Service:** %s",
-		data.Title, data.HTMLURL, data.Service.Summary)
+	msg := fmt.Sprintf("#### :rotating_light: Incident Triggered\n**%s**\n**Service:** %s",
+		safeMarkdownLink(data.Title, data.HTMLURL), escapeMarkdown(data.Service.Summary))
 	if data.Urgency != "" {
-		msg += fmt.Sprintf("\n**Urgency:** %s", data.Urgency)
+		msg += fmt.Sprintf("\n**Urgency:** %s", escapeMarkdown(data.Urgency))
 	}
 	if assignees != "" {
 		msg += fmt.Sprintf("\n**Assigned to:** %s", assignees)
 	}
 	if data.Description != "" {
-		msg += fmt.Sprintf("\n> %s", data.Description)
+		msg += fmt.Sprintf("\n> %s", escapeMarkdown(data.Description))
 	}
 	return msg
 }
 
 func (p *Plugin) formatIncidentAcknowledged(data *pagerduty.WebhookIncidentData) string {
 	assignees := formatAssignees(data.Assignees)
-	msg := fmt.Sprintf("#### :white_check_mark: Incident Acknowledged\n**[%s](%s)**\n**Service:** %s",
-		data.Title, data.HTMLURL, data.Service.Summary)
+	msg := fmt.Sprintf("#### :white_check_mark: Incident Acknowledged\n**%s**\n**Service:** %s",
+		safeMarkdownLink(data.Title, data.HTMLURL), escapeMarkdown(data.Service.Summary))
 	if assignees != "" {
 		msg += fmt.Sprintf("\n**Acknowledged by:** %s", assignees)
 	}
@@ -149,14 +192,14 @@ func (p *Plugin) formatIncidentAcknowledged(data *pagerduty.WebhookIncidentData)
 }
 
 func (p *Plugin) formatIncidentResolved(data *pagerduty.WebhookIncidentData) string {
-	return fmt.Sprintf("#### :heavy_check_mark: Incident Resolved\n**[%s](%s)**\n**Service:** %s",
-		data.Title, data.HTMLURL, data.Service.Summary)
+	return fmt.Sprintf("#### :heavy_check_mark: Incident Resolved\n**%s**\n**Service:** %s",
+		safeMarkdownLink(data.Title, data.HTMLURL), escapeMarkdown(data.Service.Summary))
 }
 
 func (p *Plugin) formatIncidentEscalated(data *pagerduty.WebhookIncidentData) string {
 	assignees := formatAssignees(data.Assignees)
-	msg := fmt.Sprintf("#### :arrow_up: Incident Escalated\n**[%s](%s)**\n**Service:** %s",
-		data.Title, data.HTMLURL, data.Service.Summary)
+	msg := fmt.Sprintf("#### :arrow_up: Incident Escalated\n**%s**\n**Service:** %s",
+		safeMarkdownLink(data.Title, data.HTMLURL), escapeMarkdown(data.Service.Summary))
 	if assignees != "" {
 		msg += fmt.Sprintf("\n**Escalated to:** %s", assignees)
 	}
@@ -165,8 +208,8 @@ func (p *Plugin) formatIncidentEscalated(data *pagerduty.WebhookIncidentData) st
 
 func (p *Plugin) formatIncidentReassigned(data *pagerduty.WebhookIncidentData) string {
 	assignees := formatAssignees(data.Assignees)
-	msg := fmt.Sprintf("#### :arrows_counterclockwise: Incident Reassigned\n**[%s](%s)**\n**Service:** %s",
-		data.Title, data.HTMLURL, data.Service.Summary)
+	msg := fmt.Sprintf("#### :arrows_counterclockwise: Incident Reassigned\n**%s**\n**Service:** %s",
+		safeMarkdownLink(data.Title, data.HTMLURL), escapeMarkdown(data.Service.Summary))
 	if assignees != "" {
 		msg += fmt.Sprintf("\n**Reassigned to:** %s", assignees)
 	}
@@ -180,9 +223,9 @@ func formatAssignees(assignees []pagerduty.UserReference) string {
 	names := make([]string, len(assignees))
 	for i, a := range assignees {
 		if a.Summary != "" {
-			names[i] = a.Summary
+			names[i] = escapeMarkdown(a.Summary)
 		} else {
-			names[i] = a.ID
+			names[i] = escapeMarkdown(a.ID)
 		}
 	}
 	return strings.Join(names, ", ")
@@ -193,14 +236,14 @@ func formatAssignees(assignees []pagerduty.UserReference) string {
 // formatOnCallChangeChannel creates a channel notification for an on-call change.
 func (p *Plugin) formatOnCallChangeChannel(scheduleName string, newEntries, removedEntries []OnCallEntry) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("#### On-Call Change: %s\n", scheduleName))
+	fmt.Fprintf(&b, "#### On-Call Change: %s\n", escapeMarkdown(scheduleName))
 
 	for _, entry := range newEntries {
 		endTime := formatTimeShort(entry.End)
-		b.WriteString(fmt.Sprintf(":large_green_circle: **%s** is now on-call (until %s)\n", entry.UserName, endTime))
+		fmt.Fprintf(&b, ":large_green_circle: **%s** is now on-call (until %s)\n", escapeMarkdown(entry.UserName), endTime)
 	}
 	for _, entry := range removedEntries {
-		b.WriteString(fmt.Sprintf(":red_circle: **%s** is no longer on-call\n", entry.UserName))
+		fmt.Fprintf(&b, ":red_circle: **%s** is no longer on-call\n", escapeMarkdown(entry.UserName))
 	}
 
 	return b.String()
@@ -208,27 +251,27 @@ func (p *Plugin) formatOnCallChangeChannel(scheduleName string, newEntries, remo
 
 // formatOnCallStartDM creates a DM notification for a user going on-call.
 func formatOnCallStartDM(scheduleName, endTime string) string {
-	return fmt.Sprintf("You are now on-call for **%s** until %s.", scheduleName, formatTimeShort(endTime))
+	return fmt.Sprintf("You are now on-call for **%s** until %s.", escapeMarkdown(scheduleName), formatTimeShort(endTime))
 }
 
 // formatOnCallEndDM creates a DM notification for a user going off-call.
 func formatOnCallEndDM(scheduleName, newUserName string) string {
 	if newUserName != "" {
-		return fmt.Sprintf("Your on-call shift for **%s** has ended. **%s** is now on-call.", scheduleName, newUserName)
+		return fmt.Sprintf("Your on-call shift for **%s** has ended. **%s** is now on-call.", escapeMarkdown(scheduleName), escapeMarkdown(newUserName))
 	}
-	return fmt.Sprintf("Your on-call shift for **%s** has ended.", scheduleName)
+	return fmt.Sprintf("Your on-call shift for **%s** has ended.", escapeMarkdown(scheduleName))
 }
 
 // formatShiftReminderDM creates a DM notification for an upcoming shift.
 func formatShiftReminderDM(scheduleName string, startTime time.Time) string {
 	remaining := time.Until(startTime)
-	return fmt.Sprintf(":bell: Heads up! Your on-call shift for **%s** starts in %s.", scheduleName, formatDuration(remaining))
+	return fmt.Sprintf(":bell: Heads up! Your on-call shift for **%s** starts in %s.", escapeMarkdown(scheduleName), formatDuration(remaining))
 }
 
 // formatShiftTakenDM creates a DM notification when someone takes your shift via override.
 func formatShiftTakenDM(overrideUserName, scheduleName, start, end string) string {
 	return fmt.Sprintf("**%s** has taken your on-call shift for **%s** (override from %s to %s).",
-		overrideUserName, scheduleName, formatTimeShort(start), formatTimeShort(end))
+		escapeMarkdown(overrideUserName), escapeMarkdown(scheduleName), formatTimeShort(start), formatTimeShort(end))
 }
 
 // formatTimeShort parses an ISO 8601 timestamp and returns a short human-readable format.
