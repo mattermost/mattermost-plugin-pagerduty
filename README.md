@@ -1,6 +1,6 @@
 # Mattermost PagerDuty Plugin
 
-[![Build Status](https://github.com/github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml)
+[![Build Status](https://github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml)
 
 No official support is provided for this plugin. Mattermost Enterprise Support entitlements do not apply.
 
