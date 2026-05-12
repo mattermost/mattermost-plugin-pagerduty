@@ -20,7 +20,7 @@ const manifestStr = `
   "support_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/issues",
   "release_notes_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/releases/tag/v2.3.0",
   "icon_path": "assets/pagerduty-icon.svg",
-  "version": "2.3.0+8727132",
+  "version": "2.3.0",
   "min_server_version": "10.7.0",
   "server": {
     "executables": {
