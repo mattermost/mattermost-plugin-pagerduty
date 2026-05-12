@@ -1,6 +1,8 @@
 # Mattermost PagerDuty Plugin
 
-[![Build Status](https://github.com/svelle/mattermost-pagerduty-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/svelle/mattermost-pagerduty-plugin/actions/workflows/ci.yml)
+[![Build Status](https://github.com/github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-pagerduty/actions/workflows/ci.yml)
+
+No official support is provided for this plugin. Mattermost Enterprise Support entitlements do not apply.
 
 ## Overview
 
@@ -21,25 +23,13 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 - **Right-Hand Sidebar**: Dedicated sidebar accessible via channel header button
 - **Background Monitoring**: Automatic on-call change detection with configurable notifications
 - **Secure Authentication**: Per-user OAuth tokens with automatic refresh, stored securely and never exposed in the UI
-
-### User Interface
-- **Tabbed Layout**: On-Call, Schedules, and Incidents tabs for quick access to different views
-- **Mine/All Filter**: Toggle between viewing all schedules or only those where you're on-call
-- **Visual Indicators**: Current on-call person prominently displayed with colored background and badges
-- **Relative Time Display**: Shows human-friendly time format ("2h 30m remaining", "Starts in 1d 4h")
-- **Paging Interface**: One-click paging with incident creation dialog
-- **Settings Panel**: Gear icon to manage notification preferences and channel subscriptions in-sidebar
-- **Responsive Design**: Clean layout that works well in the Mattermost sidebar
-- **Theme Support**: Automatically adapts to your Mattermost theme (light/dark)
-- **Enhanced Styling**: Comprehensive CSS classes for customization
+- **Slash Commands**: Full `/pagerduty` command suite for managing subscriptions and notifications
 
 ### Notifications & Events
-- **PagerDuty Webhooks**: Receive real-time incident notifications via PagerDuty V3 webhooks with HMAC-SHA256 signature verification
 - **Channel Subscriptions**: Subscribe channels to specific PagerDuty events (incident triggered/acknowledged/resolved/escalated, on-call changes)
 - **Service Filtering**: Filter channel subscriptions to specific PagerDuty services
 - **On-Call DM Notifications**: Optional personal DMs when you go on/off-call, shift reminders (30 min), and override alerts
 - **On-Call Change Detection**: Background monitoring detects on-call changes and notifies subscribed channels and users
-- **Slash Commands**: Full `/pagerduty` command suite for managing subscriptions and notifications
 
 ### Configuration
 - **PagerDuty OAuth**: Per-user OAuth integration with PagerDuty
@@ -48,13 +38,12 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 
 ## Requirements
 
-- Mattermost Server v6.2.1 or higher
-- PagerDuty account with API access
-- PagerDuty OAuth application (Scoped OAuth)
+- Mattermost Server v10.7.0 or higher
+- PagerDuty account with API and OAuth App access
 
 ## Installation
 
-1. Download the latest plugin file from the [releases page](https://github.com/svelle/mattermost-pagerduty-plugin/releases)
+1. Download the latest plugin file from the [releases page](https://github.com/mattermost/mattermost-plugin-pagerduty/releases)
 2. In Mattermost, go to **System Console > Plugins > Plugin Management**
 3. Upload the plugin file
 4. Enable the plugin
@@ -66,18 +55,18 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 1. Go to https://developer.pagerduty.com/apps and click **Create New App**
 2. Set the app name (e.g., "Mattermost PagerDuty Plugin")
 3. Under **OAuth 2.0** settings, configure:
-   - **Redirect URL**: `https://<YOUR_MATTERMOST_URL>/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/callback`
+   - **Redirect URL**: `https://<YOUR_MATTERMOST_URL>/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/callback`
    - **Grant Type**: Authorization Code
    - **Scopes** (enable all of these):
      - `incidents.read`
-     - `incidents.write`
+     - `incidents.write` (required for starting incidents from within Mattermost)
      - `oncalls.read`
      - `schedules.read`
      - `schedules.write` (required for schedule overrides)
      - `services.read`
      - `users.read`
-     - `webhook_subscriptions.read` (required for webhook setup)
-     - `webhook_subscriptions.write` (required for webhook setup)
+     - `webhook_subscriptions.read`
+     - `webhook_subscriptions.write`
 4. Save the app and copy the **Client ID** and **Client Secret**
 
 ### Step 2: Configure the Mattermost Plugin
@@ -114,60 +103,7 @@ To receive real-time incident notifications from PagerDuty:
 3. The plugin automatically creates a webhook subscription in PagerDuty with the correct URL and a randomly generated HMAC secret
 4. Check status anytime with `/pagerduty webhook status`
 
-> **Note:** Your Mattermost server must be accessible from the internet for PagerDuty to deliver webhooks. The webhook URL will be `https://<YOUR_MATTERMOST_URL>/plugins/com.svelle.pagerduty-plugin/api/v1/webhook`.
-
-## Usage
-
-### Opening the Sidebar
-
-1. Look for the PagerDuty icon in the channel header (green icon with "P")
-2. Click it to open the right-hand sidebar
-3. First-time users will see a **Connect to PagerDuty** prompt — click it to authorize your account
-4. Once connected, the sidebar loads and displays your PagerDuty schedules
-
-### Viewing Schedules
-
-1. Select the **Schedules** tab to see all available schedules with:
-   - Schedule name
-   - Description (if available)
-   - Timezone information
-2. Use the **Mine/All** toggle to filter to schedules where you're on-call
-3. Click on any schedule to see detailed on-call information
-
-### Timeline View
-
-When you click on a schedule, you'll see:
-- **Current On-Call**: Prominently displayed with colored background and ON-CALL badge
-- **Next 48 Hours**: A timeline showing all upcoming on-call transitions
-- **Relative Time**: Human-friendly time display ("2h 30m remaining", "Starts in 1d 4h")
-- **Visual Timeline**: Color-coded entries with the current on-call highlighted
-- **Direct Paging**: "📟 Page Now" button for the current on-call person
-
-### Paging Functionality
-
-The plugin allows you to directly page the current on-call person:
-- **One-Click Access**: Page button appears next to the current on-call person
-- **Incident Creation**: Creates a PagerDuty incident with customizable title and description
-- **Service Selection**: Choose which PagerDuty service to associate with the incident
-- **Smart Targeting**: Automatically assigns the incident to the current on-call person
-- **Success Feedback**: Visual confirmation when the incident is created
-
-### Incident Management
-
-The Incidents tab shows all triggered and acknowledged incidents:
-- **Incident List**: View all open incidents with status, urgency, service, and assignees
-- **Incident Details**: Click an incident to see full details including description and timeline
-- **Status Actions**: Acknowledge or resolve incidents directly from Mattermost
-- **Incident Notes**: View and add notes to incidents for collaboration
-- **Direct Links**: Click through to PagerDuty for full incident context
-
-### Schedule Overrides
-
-Create temporary schedule overrides from the timeline view:
-- **Quick Override**: Override a single shift for a specific time window
-- **Bulk Override**: Override all of a person's shifts across a date range (up to 30 days) — select from all schedule members, not just those currently on-call
-- **User Search**: Search for PagerDuty users to assign the override to
-- **Flexible Duration**: Set custom start and end times for the override
+> **Note:** Your Mattermost server must be accessible from the internet for PagerDuty to deliver webhooks. The webhook URL will be `https://<YOUR_MATTERMOST_URL>/plugins/com.mattermost.plugin-pagerduty/api/v1/webhook`.
 
 ### Notifications & Subscriptions
 
@@ -251,7 +187,7 @@ You can also manage notification preferences from the sidebar by clicking the **
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/svelle/mattermost-pagerduty-plugin.git
+   git clone https://github.com/svelle/mattermost-plugin-pagerduty.git
    cd mattermost-pagerduty-plugin
    ```
 
@@ -260,7 +196,7 @@ You can also manage notification preferences from the sidebar by clicking the **
    make
    ```
 
-This will create the plugin file at `dist/com.svelle.pagerduty-plugin.tar.gz`.
+This will create the plugin file at `dist/com.mattermost.plugin-pagerduty.tar.gz`.
 
 ### Local Development
 
@@ -284,37 +220,16 @@ Here's a list of nice-to-have features that could enhance the PagerDuty plugin:
 
 ### Schedule Management
 - **Shift swapping**: Request and approve shift swaps between team members
-- **Multi-schedule view**: View multiple schedules side-by-side for coordination
-- **Calendar export**: Export on-call schedules to iCal/Google Calendar format
-- **Historical view**: View past on-call schedules and coverage
 
 ### Enhanced Features
-- **User profiles**: Click on users to see their contact info and current status
-- **Timezone support**: Show schedules in user's local timezone with conversion
-- **Mobile optimization**: Responsive design for mobile Mattermost apps
+- **Mobile optimization**: Add full mobile support beyond slash commands.
 
 ### Automation & Integration
 - **Incident response**: Create Mattermost channels automatically for PagerDuty incidents
 - **Status sync**: Sync on-call status to Mattermost user status
-- **Escalation policies**: View and understand escalation policies
-- **Service dependencies**: Visualize service dependencies and their on-call teams
-
-### Analytics & Reporting
-- **On-call metrics**: Time spent on-call, incident load per person
-- **Coverage reports**: Identify gaps in on-call coverage
-- **Rotation fairness**: Ensure equal distribution of on-call duties
-- **Custom dashboards**: Build team-specific on-call dashboards
-
-### Administrative Features
-- **Bulk configuration**: Configure multiple schedules at once
-- **Role-based access**: Restrict who can view certain schedules
-- **Audit logging**: Track who viewed or modified schedule information
 
 ### User Experience
-- **Customizable views**: Save preferred schedule views and filters
-- **Keyboard shortcuts**: Navigate schedules quickly with keyboard commands
-- **Rich schedule details**: Show more context like team descriptions, runbooks
-- **Presence indicators**: Show if on-call person is online in Mattermost
+- **User Integration**: Directly open DMs with On-Call users from the sidebar.
 
 ## Contributing
 
