@@ -124,7 +124,7 @@ func (p *Plugin) executeConnect(args *model.CommandArgs) (*model.CommandResponse
 		return ephemeral("You are already connected to PagerDuty. Run `/pagerduty disconnect` first to reconnect with updated permissions."), nil
 	}
 
-	connectURL := fmt.Sprintf("%s/plugins/%s/api/v1/oauth/connect", p.siteURL, pluginID)
+	connectURL := fmt.Sprintf("%s/plugins/%s/api/v1/oauth/connect", p.siteURL, manifest.Id)
 	return ephemeral(fmt.Sprintf("[Click here to connect your PagerDuty account](%s)", connectURL)), nil
 }
 
@@ -317,7 +317,7 @@ func (p *Plugin) executeWebhookSetup(args *model.CommandArgs) (*model.CommandRes
 	secret := hex.EncodeToString(secretBytes)
 
 	// Build the webhook URL
-	webhookURL := fmt.Sprintf("%s/plugins/%s/api/v1/webhook", p.siteURL, pluginID)
+	webhookURL := fmt.Sprintf("%s/plugins/%s/api/v1/webhook", p.siteURL, manifest.Id)
 
 	// Webhook event types to subscribe to
 	events := IncidentEventTypes

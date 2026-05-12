@@ -38,7 +38,7 @@ describe('Client', () => {
 
             const result = await client.getSchedules();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedules', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/schedules', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -86,7 +86,7 @@ describe('Client', () => {
 
             const result = await client.getOnCalls();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oncalls', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -107,7 +107,7 @@ describe('Client', () => {
 
             const result = await client.getOnCalls('SCHED1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oncalls?schedule_id=SCHED1', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oncalls?schedule_id=SCHED1', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -145,7 +145,7 @@ describe('Client', () => {
 
             const result = await client.getScheduleDetails('SCHED1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/schedule?id=SCHED1', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/schedule?id=SCHED1', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -181,7 +181,7 @@ describe('Client', () => {
 
             const result = await client.getIncidents();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/incidents', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -212,7 +212,7 @@ describe('Client', () => {
             await client.getIncidents({userIds: ['U1', 'U2'], scheduleId: 'SCHED1'});
 
             expect(global.fetch).toHaveBeenCalledWith(
-                'http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents?user_ids=U1%2CU2&schedule_id=SCHED1',
+                'http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/incidents?user_ids=U1%2CU2&schedule_id=SCHED1',
                 expect.objectContaining({method: 'GET'}),
             );
         });
@@ -231,7 +231,7 @@ describe('Client', () => {
 
             const result = await client.updateIncident('INC1', 'acknowledged');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/incidents/INC1', expect.objectContaining({
                 method: 'PUT',
                 credentials: 'include',
                 headers: {
@@ -268,7 +268,7 @@ describe('Client', () => {
 
             const result = await client.getIncidentNotes('INC1');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/incidents/INC1/notes', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -293,7 +293,7 @@ describe('Client', () => {
 
             const result = await client.createIncidentNote('INC1', 'Root cause identified');
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/incidents/INC1/notes', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/incidents/INC1/notes', expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -326,7 +326,7 @@ describe('Client', () => {
 
             const result = await client.getConnectionStatus();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/status', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/status', expect.objectContaining({
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -362,7 +362,7 @@ describe('Client', () => {
     describe('getConnectUrl', () => {
         it('should return the correct OAuth connect URL', () => {
             const url = client.getConnectUrl();
-            expect(url).toBe('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect');
+            expect(url).toBe('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/connect');
         });
     });
 
@@ -374,7 +374,7 @@ describe('Client', () => {
 
             await client.disconnect();
 
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/disconnect', expect.objectContaining({
+            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/disconnect', expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
                 headers: {

@@ -20,7 +20,7 @@ func escapeMarkdown(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\r", " ")
-	s = strings.ReplaceAll(s, "@", "@​")
+	s = strings.ReplaceAll(s, "@", "@\u200b")
 	replacer := strings.NewReplacer(
 		"\\", "\\\\",
 		"`", "\\`",
