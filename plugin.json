@@ -1,11 +1,11 @@
 {
-    "id": "com.svelle.pagerduty-plugin",
+    "id": "com.mattermost.plugin-pagerduty",
     "name": "Mattermost PagerDuty Plugin",
     "description": "PagerDuty integration for Mattermost - View on-call schedules and current on-call users directly within Mattermost.",
-    "homepage_url": "https://github.com/svelle/mattermost-pagerduty-plugin",
-    "support_url": "https://github.com/svelle/mattermost-pagerduty-plugin/issues",
+    "homepage_url": "https://github.com/mattermost/mattermost-plugin-pagerduty",
+    "support_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/issues",
     "icon_path": "assets/pagerduty-icon.svg",
-    "min_server_version": "6.2.1",
+    "min_server_version": "10.7.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
@@ -20,7 +20,7 @@
     },
     "settings_schema": {
         "header": "Configure your PagerDuty integration settings below.",
-        "footer": "Need help? Visit our [documentation](https://github.com/svelle/mattermost-pagerduty-plugin#configuration).",
+        "footer": "Need help? Visit our [documentation](https://github.com/mattermost/mattermost-plugin-pagerduty#configuration).",
         "settings": [
             {
                 "key": "OAuthClientID",
