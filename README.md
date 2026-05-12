@@ -179,7 +179,7 @@ You can also manage notification preferences from the sidebar by clicking the **
 
 ### Prerequisites
 
-- Go 1.22 or higher
+- Go 1.23 or higher
 - Node.js 16 or higher
 - npm 8 or higher
 
