@@ -188,8 +188,7 @@ You can also manage notification preferences from the sidebar by clicking the **
 1. Clone the repository:
    ```bash
    git clone https://github.com/svelle/mattermost-plugin-pagerduty.git
-   cd mattermost-pagerduty-plugin
-   ```
+   cd mattermost-plugin-pagerduty
 
 2. Build the plugin:
    ```bash
