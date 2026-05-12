@@ -18,8 +18,6 @@ import (
 )
 
 const (
-	pluginID = "com.svelle.pagerduty-plugin"
-
 	pagerDutyAuthURL  = "https://identity.pagerduty.com/oauth/authorize"
 	pagerDutyTokenURL = "https://identity.pagerduty.com/oauth/token" //nolint:gosec // Not a credential
 
@@ -28,7 +26,7 @@ const (
 )
 
 func (p *Plugin) getOAuthRedirectURI() string {
-	return fmt.Sprintf("%s/plugins/%s/api/v1/oauth/callback", p.siteURL, pluginID)
+	return fmt.Sprintf("%s/plugins/%s/api/v1/oauth/callback", p.siteURL, manifest.Id)
 }
 
 func (p *Plugin) handleOAuthConnect(w http.ResponseWriter, r *http.Request) {

@@ -147,7 +147,7 @@ describe('PagerDutySidebar', () => {
 
     it('should open popup when connect button is clicked', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: false});
-        mockClient.getConnectUrl.mockReturnValue('http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect');
+        mockClient.getConnectUrl.mockReturnValue('http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/connect');
 
         const mockPopup = {closed: true};
         window.open = jest.fn().mockReturnValue(mockPopup);
@@ -161,7 +161,7 @@ describe('PagerDutySidebar', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Connect to PagerDuty'}));
 
         expect(window.open).toHaveBeenCalledWith(
-            'http://localhost:8065/plugins/com.svelle.pagerduty-plugin/api/v1/oauth/connect',
+            'http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1/oauth/connect',
             'pagerduty-oauth',
             'width=600,height=700',
         );

@@ -23,13 +23,13 @@ type ScheduleLayerUser struct {
 }
 
 type ScheduleLayer struct {
-	ID                        string               `json:"id"`
-	Name                      string               `json:"name"`
-	Start                     time.Time            `json:"start"`
-	End                       *time.Time           `json:"end"`
-	RotationVirtualStart      time.Time            `json:"rotation_virtual_start"`
-	RotationTurnLengthSeconds int                  `json:"rotation_turn_length_seconds"`
-	Users                     []ScheduleLayerUser  `json:"users"`
+	ID                        string              `json:"id"`
+	Name                      string              `json:"name"`
+	Start                     time.Time           `json:"start"`
+	End                       *time.Time          `json:"end"`
+	RotationVirtualStart      time.Time           `json:"rotation_virtual_start"`
+	RotationTurnLengthSeconds int                 `json:"rotation_turn_length_seconds"`
+	Users                     []ScheduleLayerUser `json:"users"`
 }
 
 type OverrideSubcycle struct {
