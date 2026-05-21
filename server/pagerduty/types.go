@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package pagerduty
 
 import (
@@ -12,8 +15,8 @@ type Schedule struct {
 	TimeZone         string           `json:"time_zone"`
 	Summary          string           `json:"summary"`
 	ScheduleLayers   []ScheduleLayer  `json:"schedule_layers,omitempty"`
-	OverrideSubcycle OverrideSubcycle `json:"override_subcycle,omitempty"`
-	FinalSchedule    FinalSchedule    `json:"final_schedule,omitempty"`
+	OverrideSubcycle OverrideSubcycle `json:"override_subcycle,omitempty"` //nolint:modernize // omitzero not applicable to nested structs in API types
+	FinalSchedule    FinalSchedule    `json:"final_schedule,omitempty"`    //nolint:modernize
 }
 
 // ScheduleLayerUser wraps a UserReference as returned by the PagerDuty API

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package testutils
 
 import (
@@ -30,7 +33,7 @@ func SetupTestPlugin(t *testing.T) (*plugintest.API, *mux.Router) {
 }
 
 // MakeAuthenticatedRequest creates an HTTP request with authentication headers
-func MakeAuthenticatedRequest(t *testing.T, method, url string, body interface{}, userID string) *http.Request {
+func MakeAuthenticatedRequest(t *testing.T, method, url string, body any, userID string) *http.Request {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyBytes, err := json.Marshal(body)
@@ -48,7 +51,7 @@ func MakeAuthenticatedRequest(t *testing.T, method, url string, body interface{}
 }
 
 // AssertJSONResponse checks if the response has the expected status code and decodes the JSON body
-func AssertJSONResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int, v interface{}) {
+func AssertJSONResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int, v any) {
 	require.Equal(t, expectedStatus, w.Code)
 
 	if v != nil && w.Body.Len() > 0 {
@@ -86,8 +89,8 @@ func CreateTestUser(id, username string) *model.User {
 }
 
 // CreateTestConfig creates a test plugin configuration
-func CreateTestConfig() map[string]interface{} {
-	return map[string]interface{}{
+func CreateTestConfig() map[string]any {
+	return map[string]any{
 		"OAuthClientID":     "test-client-id",
 		"OAuthClientSecret": "test-client-secret",
 		"APIBaseURL":        "https://api.pagerduty.com",

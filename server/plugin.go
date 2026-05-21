@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -58,14 +61,14 @@ type Plugin struct {
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
 func (p *Plugin) OnActivate() error {
-	p.client = pluginapi.NewClient(p.MattermostPlugin.API, p.MattermostPlugin.Driver)
+	p.client = pluginapi.NewClient(p.API, p.Driver)
 
 	// Initialize the PagerDuty client factory with the default OAuth implementation
 	p.createPagerDutyClient = pagerduty.NewOAuthClient
 
 	p.kvstore = kvstore.NewKVStore(p.client)
 
-	config := p.MattermostPlugin.API.GetConfig()
+	config := p.API.GetConfig()
 	if config.ServiceSettings.SiteURL == nil {
 		return errors.New("site URL is not configured")
 	}

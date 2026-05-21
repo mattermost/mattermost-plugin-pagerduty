@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -979,12 +982,12 @@ func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) 
 
 		w.Header().Set("Content-Type", "application/json")
 		if sub == nil {
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": nil}); err != nil {
+			if err := json.NewEncoder(w).Encode(map[string]any{"subscription": nil}); err != nil {
 				p.client.Log.Error("Failed to encode null subscription", "error", err.Error())
 			}
 			return
 		}
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": sub}); err != nil {
+		if err := json.NewEncoder(w).Encode(map[string]any{"subscription": sub}); err != nil {
 			p.client.Log.Error("Failed to encode subscription response", "error", err.Error())
 		}
 		return
@@ -1014,7 +1017,7 @@ func (p *Plugin) handleGetSubscriptions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscriptions": subs}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]any{"subscriptions": subs}); err != nil {
 		p.client.Log.Error("Failed to encode subscriptions response", "error", err.Error())
 	}
 }
@@ -1089,7 +1092,7 @@ func (p *Plugin) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"subscription": sub}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]any{"subscription": sub}); err != nil {
 		p.client.Log.Error("Failed to encode subscription response", "error", err.Error())
 	}
 }
@@ -1128,7 +1131,7 @@ func (p *Plugin) handleDeleteSubscription(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"ok": true}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]any{"ok": true}); err != nil {
 		p.client.Log.Error("Failed to encode delete response", "error", err.Error())
 	}
 }
@@ -1149,7 +1152,7 @@ func (p *Plugin) handleWebhookSetup(w http.ResponseWriter, r *http.Request) {
 
 	resp, _ := p.executeWebhookSetup(&model.CommandArgs{UserId: userID})
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"message": resp.Text}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]any{"message": resp.Text}); err != nil {
 		p.client.Log.Error("Failed to encode webhook setup response", "error", err.Error())
 	}
 }
@@ -1168,7 +1171,7 @@ func (p *Plugin) handleWebhookTeardown(w http.ResponseWriter, r *http.Request) {
 
 	resp, _ := p.executeWebhookTeardown(&model.CommandArgs{UserId: userID})
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"message": resp.Text}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]any{"message": resp.Text}); err != nil {
 		p.client.Log.Error("Failed to encode webhook teardown response", "error", err.Error())
 	}
 }
@@ -1176,7 +1179,7 @@ func (p *Plugin) handleWebhookTeardown(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleWebhookStatus(w http.ResponseWriter, r *http.Request) {
 	reg, err := p.kvstore.GetWebhookRegistration()
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"active": false,
 	}
 

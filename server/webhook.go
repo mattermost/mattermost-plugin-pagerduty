@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -104,7 +107,7 @@ func (p *Plugin) verifyWebhookSignature(body []byte, signatureHeader string) boo
 
 	// The header may contain multiple comma-separated signatures (e.g. "v1=abc,v1=def").
 	// Accept the request if ANY signature matches.
-	for _, sig := range strings.Split(signatureHeader, ",") {
+	for sig := range strings.SplitSeq(signatureHeader, ",") {
 		sig = strings.TrimSpace(sig)
 		parts := strings.SplitN(sig, "=", 2)
 		if len(parts) != 2 || parts[0] != "v1" {

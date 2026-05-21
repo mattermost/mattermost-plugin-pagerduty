@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -27,7 +30,7 @@ type configuration struct {
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
 // your configuration has reference types.
 func (c *configuration) Clone() *configuration {
-	var clone = *c
+	clone := *c
 	return &clone
 }
 
@@ -78,13 +81,13 @@ func (p *Plugin) OnConfigurationChange() error {
 	if p.client != nil {
 		p.client.Log.Info("OnConfigurationChange: invoked (client is initialized)")
 	} else {
-		p.MattermostPlugin.API.LogInfo("OnConfigurationChange: invoked (client is nil, pre-OnActivate)")
+		p.API.LogInfo("OnConfigurationChange: invoked (client is nil, pre-OnActivate)")
 	}
 
-	var configuration = new(configuration)
+	configuration := new(configuration)
 
 	// Load the public configuration fields from the Mattermost server configuration.
-	if err := p.MattermostPlugin.API.LoadPluginConfiguration(configuration); err != nil {
+	if err := p.API.LoadPluginConfiguration(configuration); err != nil {
 		return errors.Wrap(err, "failed to load plugin configuration")
 	}
 
@@ -103,7 +106,7 @@ func (p *Plugin) OnConfigurationChange() error {
 			p.client.Log.Info("OnConfigurationChange: slash command re-registered successfully")
 		}
 	} else {
-		p.MattermostPlugin.API.LogInfo("OnConfigurationChange: skipping command registration (client is nil)")
+		p.API.LogInfo("OnConfigurationChange: skipping command registration (client is nil)")
 	}
 
 	return nil

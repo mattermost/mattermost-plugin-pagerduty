@@ -18,9 +18,8 @@ const manifestStr = `
   "description": "PagerDuty integration for Mattermost - View on-call schedules and current on-call users directly within Mattermost.",
   "homepage_url": "https://github.com/mattermost/mattermost-plugin-pagerduty",
   "support_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/issues",
-  "release_notes_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/releases/tag/v2.3.0",
   "icon_path": "assets/pagerduty-icon.svg",
-  "version": "2.3.0",
+  "version": "1.0.0",
   "min_server_version": "10.7.0",
   "server": {
     "executables": {
