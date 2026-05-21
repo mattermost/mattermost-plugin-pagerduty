@@ -5,7 +5,6 @@
     "homepage_url": "https://github.com/mattermost/mattermost-plugin-pagerduty",
     "support_url": "https://github.com/mattermost/mattermost-plugin-pagerduty/issues",
     "icon_path": "assets/pagerduty-icon.svg",
-    "version": "2.3.0",
     "min_server_version": "10.7.0",
     "server": {
         "executables": {

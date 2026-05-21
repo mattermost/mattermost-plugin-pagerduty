@@ -1,8 +1,6 @@
 module github.com/svelle/mattermost-pagerduty-plugin
 
-go 1.23.0
-
-toolchain go1.23.11
+go 1.25
 
 require (
 	github.com/mattermost/mattermost/server/public v0.1.10

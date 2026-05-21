@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -27,7 +30,7 @@ func TestPlugin_handleError(t *testing.T) {
 		name         string
 		apiError     *APIError
 		expectedCode int
-		expectedBody map[string]interface{}
+		expectedBody map[string]any
 	}{
 		{
 			name: "standard error",
@@ -37,7 +40,7 @@ func TestPlugin_handleError(t *testing.T) {
 				StatusCode: http.StatusBadRequest,
 			},
 			expectedCode: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
+			expectedBody: map[string]any{
 				"id":      "test.error",
 				"message": "Test error message",
 			},
@@ -50,7 +53,7 @@ func TestPlugin_handleError(t *testing.T) {
 				StatusCode: http.StatusInternalServerError,
 			},
 			expectedCode: http.StatusInternalServerError,
-			expectedBody: map[string]interface{}{
+			expectedBody: map[string]any{
 				"id":      "internal.error",
 				"message": "Something went wrong",
 			},
@@ -71,7 +74,7 @@ func TestPlugin_handleError(t *testing.T) {
 			assert.Equal(t, tt.expectedCode, w.Code)
 			assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-			var responseBody map[string]interface{}
+			var responseBody map[string]any
 			err := json.Unmarshal(w.Body.Bytes(), &responseBody)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedBody, responseBody)
@@ -124,7 +127,7 @@ func TestPlugin_MattermostAuthorizationRequired(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-		var errResp map[string]interface{}
+		var errResp map[string]any
 		err := json.Unmarshal(w.Body.Bytes(), &errResp)
 		assert.NoError(t, err)
 		assert.Equal(t, "not_authorized", errResp["id"])
@@ -158,7 +161,7 @@ func TestPlugin_getConfiguration(t *testing.T) {
 		}
 
 		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			go func() {
 				config := plugin.getConfiguration()
 				assert.NotNil(t, config)
@@ -166,7 +169,7 @@ func TestPlugin_getConfiguration(t *testing.T) {
 			}()
 		}
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 	})

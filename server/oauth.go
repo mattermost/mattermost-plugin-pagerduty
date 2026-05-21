@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -170,7 +173,7 @@ func (p *Plugin) exchangeCodeForToken(code string) (*kvstore.OAuthToken, error) 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to request token")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	const maxTokenResponseSize = 1 << 20 // 1MB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseSize))
@@ -266,7 +269,7 @@ if (window.opener) {
 </body>
 </html>`, html.EscapeString(title), html.EscapeString(title), message)
 
-	fmt.Fprint(w, page)
+	_, _ = fmt.Fprint(w, page)
 }
 
 func (p *Plugin) refreshUserToken(userID string, token *kvstore.OAuthToken) (*kvstore.OAuthToken, error) {
@@ -288,7 +291,7 @@ func (p *Plugin) refreshUserToken(userID string, token *kvstore.OAuthToken) (*kv
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to refresh token")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	const maxTokenResponseSize = 1 << 20 // 1MB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseSize))

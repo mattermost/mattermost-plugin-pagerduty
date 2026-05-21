@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import "github.com/svelle/mattermost-pagerduty-plugin/server/store/kvstore"
@@ -32,12 +35,14 @@ var IncidentEventTypes = []string{
 
 // Type aliases so we can use shorter names in the main package
 // while keeping the canonical definitions in the kvstore package.
-type ChannelSubscription = kvstore.ChannelSubscription
-type UserNotificationPrefs = kvstore.UserNotificationPrefs
-type WebhookRegistration = kvstore.WebhookRegistration
-type OnCallSnapshot = kvstore.OnCallSnapshot
-type OnCallEntry = kvstore.OnCallEntry
-type ReminderRecord = kvstore.ReminderRecord
+type (
+	ChannelSubscription   = kvstore.ChannelSubscription
+	UserNotificationPrefs = kvstore.UserNotificationPrefs
+	WebhookRegistration   = kvstore.WebhookRegistration
+	OnCallSnapshot        = kvstore.OnCallSnapshot
+	OnCallEntry           = kvstore.OnCallEntry
+	ReminderRecord        = kvstore.ReminderRecord
+)
 
 // DefaultNotificationPrefs returns the default notification preferences (all off).
 func DefaultNotificationPrefs() *UserNotificationPrefs {

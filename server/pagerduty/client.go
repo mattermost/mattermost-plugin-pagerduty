@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package pagerduty
 
 import (
@@ -60,6 +63,7 @@ func NewOAuthClient(accessToken, baseURL string) *Client {
 }
 
 // NewClient creates a PagerDuty client using a legacy API token.
+//
 // Deprecated: Use NewOAuthClient for OAuth Bearer token authentication.
 func NewClient(apiToken, baseURL string) *Client {
 	if baseURL == "" {
@@ -79,11 +83,11 @@ func (c *Client) doRequest(method, path string, params url.Values) ([]byte, erro
 	return c.doRequestWithBody(method, path, params, nil)
 }
 
-func (c *Client) doRequestWithBody(method, path string, params url.Values, body interface{}) ([]byte, error) {
+func (c *Client) doRequestWithBody(method, path string, params url.Values, body any) ([]byte, error) {
 	return c.doRequestWithBodyAndHeaders(method, path, params, body, nil)
 }
 
-func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Values, body interface{}, extraHeaders map[string]string) ([]byte, error) {
+func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Values, body any, extraHeaders map[string]string) ([]byte, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse URL")
@@ -119,7 +123,7 @@ func (c *Client) doRequestWithBodyAndHeaders(method, path string, params url.Val
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Limit response body to 10MB to prevent OOM from oversized responses.
 	const maxResponseSize = 10 << 20

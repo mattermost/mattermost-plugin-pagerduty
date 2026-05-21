@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -135,12 +138,9 @@ func (p *Plugin) subscriptionMatchesEvent(sub *ChannelSubscription, eventType st
 		return false
 	}
 
-	// Check if ANY of the event's service IDs match ANY of the subscription's service IDs
 	for _, subSID := range sub.ServiceIDs {
-		for _, eventSID := range serviceIDs {
-			if subSID == eventSID {
-				return true
-			}
+		if slices.Contains(serviceIDs, subSID) {
+			return true
 		}
 	}
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
 package main
 
 import (
@@ -50,24 +53,28 @@ func (m *mockKVStore) GetChannelSubscription(channelID string) (*kvstore.Channel
 	}
 	return nil, nil
 }
+
 func (m *mockKVStore) SetChannelSubscription(sub *kvstore.ChannelSubscription) error {
 	if m.setChannelSubscriptionFunc != nil {
 		return m.setChannelSubscriptionFunc(sub)
 	}
 	return nil
 }
+
 func (m *mockKVStore) DeleteChannelSubscription(channelID string) error {
 	if m.deleteChannelSubscriptionFunc != nil {
 		return m.deleteChannelSubscriptionFunc(channelID)
 	}
 	return nil
 }
+
 func (m *mockKVStore) GetSubscriptionIndex() ([]string, error) {
 	if m.getSubscriptionIndexFunc != nil {
 		return m.getSubscriptionIndexFunc()
 	}
 	return nil, nil
 }
+
 func (m *mockKVStore) SetSubscriptionIndex(channelIDs []string) error {
 	if m.setSubscriptionIndexFunc != nil {
 		return m.setSubscriptionIndexFunc(channelIDs)
@@ -82,6 +89,7 @@ func (m *mockKVStore) GetUserNotificationPrefs(userID string) (*kvstore.UserNoti
 	}
 	return nil, nil
 }
+
 func (m *mockKVStore) SetUserNotificationPrefs(userID string, prefs *kvstore.UserNotificationPrefs) error {
 	if m.setUserNotificationPrefsFunc != nil {
 		return m.setUserNotificationPrefsFunc(userID, prefs)
@@ -96,12 +104,14 @@ func (m *mockKVStore) GetWebhookRegistration() (*kvstore.WebhookRegistration, er
 	}
 	return nil, nil
 }
+
 func (m *mockKVStore) SetWebhookRegistration(reg *kvstore.WebhookRegistration) error {
 	if m.setWebhookRegistrationFunc != nil {
 		return m.setWebhookRegistrationFunc(reg)
 	}
 	return nil
 }
+
 func (m *mockKVStore) DeleteWebhookRegistration() error {
 	if m.deleteWebhookRegistrationFunc != nil {
 		return m.deleteWebhookRegistrationFunc()
@@ -116,6 +126,7 @@ func (m *mockKVStore) GetOnCallSnapshot() (*kvstore.OnCallSnapshot, error) {
 	}
 	return nil, nil
 }
+
 func (m *mockKVStore) SetOnCallSnapshot(snapshot *kvstore.OnCallSnapshot) error {
 	if m.setOnCallSnapshotFunc != nil {
 		return m.setOnCallSnapshotFunc(snapshot)
@@ -174,7 +185,7 @@ func setupMockAPIForActivation(t *testing.T, api *plugintest.API, siteURL string
 	// Create the assets directory and a minimal profile image for EnsureBot
 	bundleDir := t.TempDir()
 	assetsDir := filepath.Join(bundleDir, "assets")
-	_ = os.MkdirAll(assetsDir, 0o755)
+	_ = os.MkdirAll(assetsDir, 0o750)
 	_ = os.WriteFile(filepath.Join(assetsDir, "profile.png"), []byte{0x89, 0x50, 0x4E, 0x47}, 0o600)
 
 	api.On("GetConfig").Return(&model.Config{
