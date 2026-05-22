@@ -234,7 +234,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
             const scheduleMap: Record<string, string> = {};
             for (const oc of (onCallsData.oncalls || [])) {
                 if (oc.user && !usersMap.has(oc.user.id)) {
-                    usersMap.set(oc.user.id, oc.user);
+                    usersMap.set(oc.user.id, {
+                        ...oc.user,
+                        name: oc.user.name || oc.user.summary || oc.user.email || oc.user.id,
+                    });
                 }
                 if (oc.user && oc.schedule?.name && !scheduleMap[oc.user.id]) {
                     scheduleMap[oc.user.id] = oc.schedule.name;

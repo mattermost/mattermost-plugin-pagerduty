@@ -136,4 +136,27 @@ describe('IncidentList', () => {
         fireEvent.click(resolveButtons[0]);
         expect(defaultProps.onResolve).toHaveBeenCalledWith('INC1');
     });
+
+    it('should show summary when responder name is empty', () => {
+        render(
+            <IncidentList
+                {...defaultProps}
+                incidents={[]}
+                users={[{
+                    id: 'U1',
+                    name: '',
+                    email: '',
+                    type: 'user',
+                    summary: 'Jane Doe',
+                    description: '',
+                    role: 'user',
+                    time_zone: 'UTC',
+                    color: '',
+                    avatar_url: '',
+                }]}
+            />,
+        );
+
+        expect(screen.getByRole('option', {name: 'Jane Doe'})).toBeTruthy();
+    });
 });

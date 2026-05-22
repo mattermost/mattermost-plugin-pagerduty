@@ -158,7 +158,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                         key={u.id}
                         value={u.id}
                     >
-                        {u.name}
+                        {u.name || u.summary || u.email || u.id}
                     </option>
                 ))}
             </select>
