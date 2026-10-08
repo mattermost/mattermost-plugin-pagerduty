@@ -44,8 +44,16 @@ endif
 # Used for semver bumping
 PROTECTED_BRANCH := master
 APP_NAME    := $(shell basename -s .git `git config --get remote.origin.url`)
-CURRENT_VERSION := $(strip $(shell git describe --abbrev=0 --tags))
-LATEST_RELEASE_TAG_RAW := $(shell git tag -l "v*" --sort=-v:refname | grep -v '\-rc' | head -n 1 || true)
+# Tag names are attacker-controlled (git refs may contain shell metacharacters), so only
+# values matching strict semver are ever used. The raw value is never placed in shell text.
+CURRENT_VERSION_RAW := $(strip $(shell git describe --abbrev=0 --tags 2>/dev/null))
+CURRENT_VERSION := $(strip $(shell git describe --abbrev=0 --tags 2>/dev/null | grep -xE '^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$$'))
+ifneq ($(CURRENT_VERSION_RAW),)
+ifneq ($(CURRENT_VERSION_RAW),$(CURRENT_VERSION))
+$(error Invalid git tag "$(CURRENT_VERSION_RAW)": tags must match ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$$)
+endif
+endif
+LATEST_RELEASE_TAG_RAW := $(shell git tag -l "v*" --sort=-v:refname | grep -xE '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n 1 || true)
 LATEST_RELEASE_TAG := $(strip $(LATEST_RELEASE_TAG_RAW))
 ifeq ($(LATEST_RELEASE_TAG),)
 LATEST_RELEASE_TAG := $(CURRENT_VERSION)
@@ -54,7 +62,7 @@ VERSION_PARTS := $(subst ., ,$(subst v,,$(subst -rc, ,$(CURRENT_VERSION))))
 MAJOR := $(word 1,$(VERSION_PARTS))
 MINOR := $(word 2,$(VERSION_PARTS))
 PATCH := $(word 3,$(VERSION_PARTS))
-RC := $(shell echo $(CURRENT_VERSION) | grep -oE 'rc[0-9]+' | sed 's/rc//')
+RC := $(word 2,$(subst -rc, ,$(CURRENT_VERSION)))
 # Check if current branch is protected
 define check_protected_branch
 	@current_branch=$$(git rev-parse --abbrev-ref HEAD); \
@@ -95,8 +103,8 @@ patch: ## to bump patch version (semver)
 	@$(eval PATCH := $(shell echo $$(($(PATCH)+1))))
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH))
 	@echo Bumping $(APP_NAME) to Patch version $(MAJOR).$(MINOR).$(PATCH)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH) -m "Bumping $(APP_NAME) to Patch version $(MAJOR).$(MINOR).$(PATCH)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)" -m "Bumping $(APP_NAME) to Patch version $(MAJOR).$(MINOR).$(PATCH)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)"
 	@echo Bumped $(APP_NAME) to Patch version $(MAJOR).$(MINOR).$(PATCH)
 
 minor: ## to bump minor version (semver)
@@ -111,8 +119,8 @@ minor: ## to bump minor version (semver)
 	@$(eval PATCH := 0)
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH))
 	@echo Bumping $(APP_NAME) to Minor version $(MAJOR).$(MINOR).$(PATCH)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH) -m "Bumping $(APP_NAME) to Minor version $(MAJOR).$(MINOR).$(PATCH)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)" -m "Bumping $(APP_NAME) to Minor version $(MAJOR).$(MINOR).$(PATCH)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)"
 	@echo Bumped $(APP_NAME) to Minor version $(MAJOR).$(MINOR).$(PATCH)
 
 major: ## to bump major version (semver)
@@ -128,8 +136,8 @@ major: ## to bump major version (semver)
 	$(eval PATCH := 0)
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH))
 	@echo Bumping $(APP_NAME) to Major version $(MAJOR).$(MINOR).$(PATCH)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH) -m "Bumping $(APP_NAME) to Major version $(MAJOR).$(MINOR).$(PATCH)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)" -m "Bumping $(APP_NAME) to Major version $(MAJOR).$(MINOR).$(PATCH)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)"
 	@echo Bumped $(APP_NAME) to Major version $(MAJOR).$(MINOR).$(PATCH)
 
 patch-rc: ## to bump patch release candidate version (semver)
@@ -138,8 +146,8 @@ patch-rc: ## to bump patch release candidate version (semver)
 	@$(eval RC := $(shell echo $$(($(RC)+1))))
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH)-rc$(RC))
 	@echo Bumping $(APP_NAME) to Patch RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC) -m "Bumping $(APP_NAME) to Patch RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)" -m "Bumping $(APP_NAME) to Patch RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
 	@echo Bumped $(APP_NAME) to Patch RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
 
 minor-rc: ## to bump minor release candidate version (semver)
@@ -150,8 +158,8 @@ minor-rc: ## to bump minor release candidate version (semver)
 	@$(eval RC := 1)
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH)-rc$(RC))
 	@echo Bumping $(APP_NAME) to Minor RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC) -m "Bumping $(APP_NAME) to Minor RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)" -m "Bumping $(APP_NAME) to Minor RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
 	@echo Bumped $(APP_NAME) to Minor RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
 
 major-rc: ## to bump major release candidate version (semver)
@@ -163,8 +171,8 @@ major-rc: ## to bump major release candidate version (semver)
 	@$(eval RC := 1)
 	$(call prompt_approval,$(MAJOR).$(MINOR).$(PATCH)-rc$(RC))
 	@echo Bumping $(APP_NAME) to Major RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
-	git tag -s -a v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC) -m "Bumping $(APP_NAME) to Major RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
-	git push origin v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
+	git tag -s -a "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)" -m "Bumping $(APP_NAME) to Major RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
+	git push origin "v$(MAJOR).$(MINOR).$(PATCH)-rc$(RC)"
 	@echo Bumped $(APP_NAME) to Major RC version $(MAJOR).$(MINOR).$(PATCH)-rc$(RC)
 
 ## Checks the code style, tests, builds and bundles the plugin.
