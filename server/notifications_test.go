@@ -4,6 +4,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -183,6 +184,25 @@ func TestFormatIncidentNotification(t *testing.T) {
 		assert.Contains(t, msg, "\\*\\*bold\\*\\*", "asterisks in service summary must be escaped")
 	})
 
+	t.Run("markdown injection via incident HTMLURL is neutralized", func(t *testing.T) {
+		evil := &pagerduty.WebhookIncidentData{
+			Title:   "Server is down",
+			HTMLURL: evilLinkURL,
+			Service: pagerduty.ServiceReference{ID: "svc-1", Summary: "API"},
+			Urgency: "high",
+		}
+
+		msg := p.formatIncidentNotification(EventIncidentTriggered, evil)
+
+		dest := msg[strings.Index(msg, "](")+2 : strings.Index(msg, ")**\n")]
+		assert.NotContains(t, msg, "@channel", "no @channel mention may appear anywhere")
+		assert.NotContains(t, dest, " ", "destination must contain no spaces")
+		assert.NotContains(t, dest, ")", "destination must not close early")
+		assert.NotContains(t, msg, "![", "no image may be injected")
+		assert.Equal(t, 1, strings.Count(msg, "]("), "only one link may be rendered")
+		assert.NotContains(t, msg, "[Acknowledge now]")
+	})
+
 	t.Run("non-http incident URL is rendered as plain text", func(t *testing.T) {
 		evil := &pagerduty.WebhookIncidentData{
 			Title:   "Server is down",
@@ -355,4 +375,55 @@ func newMockAPI() *plugintest.API {
 		api.On(method, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 	}
 	return api
+}
+
+const evilLinkURL = "https://x.example/?) @channel ![](https://attacker.example/pixel.png) **[Acknowledge now](https://attacker.example/login)**"
+
+func TestSafeMarkdownLink(t *testing.T) {
+	// destination returns the text between the single "](" and the final ")".
+	destination := func(t *testing.T, out string) string {
+		t.Helper()
+		assert.Equal(t, 1, strings.Count(out, "]("))
+		assert.True(t, strings.HasSuffix(out, ")"))
+		return out[strings.Index(out, "](")+2 : len(out)-1]
+	}
+
+	t.Run("injection payload cannot break out of the link", func(t *testing.T) {
+		out := safeMarkdownLink("Incident", evilLinkURL)
+		assert.NotContains(t, out, "![")
+		dest := destination(t, out)
+		assert.NotContains(t, dest, " ")
+		assert.NotContains(t, dest, ")")
+		assert.NotContains(t, dest, "(")
+		assert.NotContains(t, dest, "[")
+		assert.NotContains(t, dest, "*")
+		assert.NotContains(t, dest, "@")
+		assert.Contains(t, dest, "%29%20%40channel%20%21%5B%5D%28")
+	})
+
+	tests := []struct {
+		name string
+		text string
+		url  string
+		want string
+	}{
+		{"normal pagerduty url unchanged", "P123", "https://example.pagerduty.com/incidents/P123?foo=bar#x", "[P123](https://example.pagerduty.com/incidents/P123?foo=bar#x)"},
+		{"existing escapes preserved", "t", "https://example.com/a%20b", "[t](https://example.com/a%20b)"},
+		{"javascript scheme", "t", "javascript:alert(1)", "t"},
+		{"empty url", "t", "", "t"},
+		{"no host", "t", "https:///path", "t"},
+		{"no host opaque", "t", "https:foo", "t"},
+		{"invalid url", "t", "http://[::1", "t"},
+		{"text is escaped", "a [b]", "javascript:x", "a \\[b\\]"},
+		{"spaces and angle brackets encoded", "t", "https://example.com/a b?q=<x>", "[t](https://example.com/a%20b?q=%3Cx%3E)"},
+		{"parens and backticks encoded", "t", "https://example.com/(a)`'\"|^{}\\", "[t](https://example.com/%28a%29%60%27%22%7C%5E%7B%7D%5C)"},
+		{"userinfo rejected", "t", "https://user@example.com/x", "t"},
+		{"at sign in path and query encoded", "t", "https://example.com/@here?u=@all", "[t](https://example.com/%40here?u=%40all)"},
+		{"non-ascii encoded", "t", "https://example.com/\u00e9", "[t](https://example.com/%C3%A9)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, safeMarkdownLink(tc.text, tc.url))
+		})
+	}
 }

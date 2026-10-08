@@ -43,17 +43,42 @@ func escapeMarkdown(s string) string {
 }
 
 // safeMarkdownLink renders [text](url). The text is markdown-escaped, and the
-// URL is validated to be http(s); if not, only the escaped text is returned.
+// URL is validated to be http(s) with a host and no userinfo, then
+// percent-encoded so it cannot terminate the link destination or inject
+// markdown; if it is invalid, only the escaped text is returned.
 func safeMarkdownLink(text, rawURL string) string {
 	safeText := escapeMarkdown(text)
 	if rawURL == "" {
 		return safeText
 	}
 	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
 		return safeText
 	}
-	return fmt.Sprintf("[%s](%s)", safeText, u.String())
+	return fmt.Sprintf("[%s](%s)", safeText, encodeMarkdownURL(u.String()))
+}
+
+// encodeMarkdownURL percent-encodes, byte by byte, every character of s that
+// is not in a strict allowlist (ASCII letters, digits and "-._~:/?#&=%+,;$").
+// Existing %XX escapes are preserved because '%' is allowed. This guarantees
+// that parentheses, brackets, whitespace, angle brackets, "@" (mentions) and
+// other markdown significant characters can never appear in a markdown link destination.
+func encodeMarkdownURL(s string) string {
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			strings.IndexByte("-._~:/?#&=%+,;$", c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hexDigits[c>>4])
+		b.WriteByte(hexDigits[c&0x0f])
+	}
+	return b.String()
 }
 
 // processWebhookEvent routes a PagerDuty webhook event to all matching channel subscriptions.
