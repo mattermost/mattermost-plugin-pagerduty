@@ -95,11 +95,11 @@ func newOAuthTestPluginWithLock(tokenURL string, store kvstore.KVStore, lockAcqu
 
 	p := newTestPlugin(api)
 	p.kvstore = store
-	p.configuration = &configuration{
+	p.setConfiguration(&configuration{
 		OAuthClientID:     "client-id",
 		OAuthClientSecret: "client-secret",
 		APIBaseURL:        "https://api.pagerduty.com",
-	}
+	})
 	p.tokenURLOverride = tokenURL
 	return p, locks
 }
