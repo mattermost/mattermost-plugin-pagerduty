@@ -5,6 +5,7 @@ import React, {useState} from 'react';
 
 import type {Incident, IncidentFilters, Schedule, User} from '@/types/pagerduty';
 import type {Theme} from '@/types/theme';
+import {getUserDisplayName} from '@/utils/user';
 
 interface Props {
     incidents: Incident[];
@@ -158,7 +159,7 @@ const IncidentList: React.FC<Props> = ({incidents, theme, loading, error, onInci
                         key={u.id}
                         value={u.id}
                     >
-                        {u.name}
+                        {getUserDisplayName(u)}
                     </option>
                 ))}
             </select>
