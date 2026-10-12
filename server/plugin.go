@@ -4,25 +4,42 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
+	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 	"github.com/pkg/errors"
 
 	"github.com/svelle/mattermost-pagerduty-plugin/server/pagerduty"
 	"github.com/svelle/mattermost-pagerduty-plugin/server/store/kvstore"
 )
 
+const (
+	// tokenRefreshLockPrefix namespaces the per-user cluster mutex guarding token refreshes.
+	tokenRefreshLockPrefix = "pd_token_refresh_"
+
+	// tokenRefreshLockTimeout bounds how long a caller waits for the cluster-wide refresh
+	// lock before reporting a transient failure instead of blocking the request forever.
+	tokenRefreshLockTimeout = 30 * time.Second
+)
+
 var (
 	// ErrNotConnected indicates the user has not connected their PagerDuty account.
 	ErrNotConnected = errors.New("not connected to PagerDuty")
 
-	// ErrTokenExpired indicates the user's OAuth token has expired and could not be refreshed.
+	// ErrTokenExpired indicates the user's OAuth token could not be refreshed and the
+	// user must reconnect (terminal). This happens when PagerDuty rejects the refresh
+	// token (invalid_grant) because it was revoked, rotated away, or expired.
 	ErrTokenExpired = errors.New("PagerDuty session expired, please reconnect")
+
+	// ErrTokenRefreshUnavailable indicates a transient failure refreshing the token
+	// (network error or 5xx). The stored token is preserved and the caller may retry.
+	ErrTokenRefreshUnavailable = errors.New("PagerDuty token refresh temporarily unavailable")
 )
 
 // Plugin implements the interface expected by the Mattermost server to communicate between the server and plugin processes.
@@ -57,6 +74,18 @@ type Plugin struct {
 
 	// onCallMonitor runs background on-call change detection.
 	onCallMonitor *OnCallMonitor
+
+	// tokenRefreshLocks holds a per-user *sync.Mutex used to serialize OAuth token
+	// refreshes within this process. PagerDuty rotates refresh tokens, so concurrent
+	// refreshes of the same user's token would replay an already-rotated refresh token
+	// and fail (invalid_grant). Cross-node exclusion is handled by a cluster mutex.
+	tokenRefreshLocks sync.Map
+
+	// tokenURLOverride, when set, replaces the PagerDuty OAuth token endpoint. Used in tests.
+	tokenURLOverride string
+
+	// refreshLockTimeoutOverride, when set, replaces tokenRefreshLockTimeout. Used in tests.
+	refreshLockTimeoutOverride time.Duration
 }
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
@@ -126,15 +155,90 @@ func (p *Plugin) getPagerDutyClientForUser(userID string) (*pagerduty.Client, er
 	}
 
 	if token.IsExpired() {
-		p.client.Log.Debug("OAuth token expired, attempting refresh", "user_id", userID)
-		token, err = p.refreshUserToken(userID, token)
+		token, err = p.refreshUserTokenSingleFlight(userID)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrTokenExpired, err)
+			return nil, err
 		}
 	}
 
 	config := p.getConfiguration()
 	return p.createPagerDutyClient(token.AccessToken, config.APIBaseURL), nil
+}
+
+// userRefreshLock returns the per-user, process-local mutex used to serialize token refreshes.
+func (p *Plugin) userRefreshLock(userID string) *sync.Mutex {
+	lock, _ := p.tokenRefreshLocks.LoadOrStore(userID, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+// refreshLockTimeout returns how long to wait for the cluster-wide refresh lock.
+func (p *Plugin) refreshLockTimeout() time.Duration {
+	if p.refreshLockTimeoutOverride > 0 {
+		return p.refreshLockTimeoutOverride
+	}
+	return tokenRefreshLockTimeout
+}
+
+// loadTokenForRefresh reads the user's stored token and reports whether it still needs
+// refreshing. Callers use it to re-check state after acquiring a lock.
+func (p *Plugin) loadTokenForRefresh(userID string) (*kvstore.OAuthToken, bool, error) {
+	token, err := p.kvstore.GetUserToken(userID)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "failed to retrieve user token")
+	}
+	if token == nil {
+		return nil, false, ErrNotConnected
+	}
+	return token, token.IsExpired(), nil
+}
+
+// refreshUserTokenSingleFlight refreshes a user's token under two layers of locking so that
+// only one refresh per user runs at a time, even in a clustered deployment. PagerDuty rotates
+// refresh tokens, so a concurrent refresh would replay an already-rotated token and fail
+// (invalid_grant), which can revoke the whole token family via reuse detection.
+//
+// The process-local mutex serializes goroutines on this node cheaply; the cluster mutex then
+// serializes across nodes. Each layer re-reads the token once the lock is held, so a caller
+// that waited reuses the token another refresher already rotated instead of replaying it.
+func (p *Plugin) refreshUserTokenSingleFlight(userID string) (*kvstore.OAuthToken, error) {
+	localLock := p.userRefreshLock(userID)
+	localLock.Lock()
+	defer localLock.Unlock()
+
+	// Re-check before reaching for the cluster lock: a goroutine on this node may have
+	// refreshed while we waited, which avoids the cluster lock's KV round-trips entirely.
+	token, needsRefresh, err := p.loadTokenForRefresh(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !needsRefresh {
+		return token, nil
+	}
+
+	clusterLock, err := cluster.NewMutex(p.API, tokenRefreshLockPrefix+userID)
+	if err != nil {
+		return nil, errors.Wrapf(ErrTokenRefreshUnavailable, "failed to create refresh lock: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), p.refreshLockTimeout())
+	defer cancel()
+
+	if err = clusterLock.LockWithContext(ctx); err != nil {
+		return nil, errors.Wrapf(ErrTokenRefreshUnavailable, "failed to acquire refresh lock: %v", err)
+	}
+	defer clusterLock.Unlock()
+
+	// Re-check now that the cluster lock is held: another node may have refreshed.
+	token, needsRefresh, err = p.loadTokenForRefresh(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !needsRefresh {
+		return token, nil
+	}
+
+	p.client.Log.Debug("OAuth token expired, attempting refresh", "user_id", userID)
+	return p.refreshUserToken(userID, token)
 }
 
 // ServeHTTP handles HTTP requests to the plugin.

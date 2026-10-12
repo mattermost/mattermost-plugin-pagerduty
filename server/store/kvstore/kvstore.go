@@ -13,9 +13,15 @@ type OAuthToken struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-// IsExpired returns true if the access token has expired (with a 60-second buffer).
+// tokenExpiryBuffer is how far ahead of the real expiry a token is treated as
+// expired. Refreshing proactively (well before expiry) keeps refreshes off the
+// hot path and avoids clustering them around the exact expiry moment.
+const tokenExpiryBuffer = 5 * time.Minute
+
+// IsExpired returns true if the access token has expired, applying a proactive
+// refresh buffer (tokenExpiryBuffer) so refreshes happen before the token lapses.
 func (t *OAuthToken) IsExpired() bool {
-	return time.Now().After(t.ExpiresAt.Add(-60 * time.Second))
+	return time.Now().After(t.ExpiresAt.Add(-tokenExpiryBuffer))
 }
 
 // OAuthState stores the CSRF state for an in-progress OAuth flow.
