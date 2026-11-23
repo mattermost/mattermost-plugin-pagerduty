@@ -140,7 +140,7 @@ All routes are under `/api/v1`, protected by `MattermostAuthorizationRequired` m
 
 ### Access control (ABAC)
 An optional rule (stored as a plugin-owned policy in the server, not in plugin config) decides which users may use the plugin. Resource type `<manifest.Id>:plugin`, action `view`, one policy whose ID is a stable `model.NewId()` kept in KV (`pagerduty_access_resource_id`, created with an atomic set).
-- `userHasAccess(userID)` wraps `p.API.EvaluateAccessControl` (no pluginapi wrapper exists): no policy -> allow; any error or nil decision -> deny (warn log).
+- `userHasAccess(userID)` wraps `p.API.EvaluateAccessControl` (no pluginapi wrapper exists): no policy -> allow; any error or nil decision -> deny (warn log). Real decisions (allow, deny, no-policy) are cached per user for 30s (`accessDecisionCache`, bounded, injectable `p.accessClock`); errors, nil decisions and resource-ID failures are never cached. Saving/deleting the policy clears the cache locally and on other nodes via `PublishPluginClusterEvent` (`access_cache_invalidate`) handled in `OnPluginClusterEvent`.
 - `AccessControlRequired` middleware gates every route on `authRouter` -> 403 `api.pagerduty.access.forbidden`. `/api/v1/webhook` (HMAC), `/access` and `/admin/access-policy/*` are not gated. `ExecuteCommand` checks `userHasAccess` too. On-call DMs and webhook posts are not gated.
 - The upstream API does not check permissions; admin routes use `SystemAdminRequired` (`isUserSystemAdmin`) -> 403 `api.pagerduty.access_policy.forbidden`.
 - Saving or deleting the policy publishes the `access_policy_changed` websocket event to all users.
@@ -148,9 +148,9 @@ An optional rule (stored as a plugin-owned policy in the server, not in plugin c
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/v1/access` | `{"allowed": bool}` for the caller |
-| GET | `/api/v1/admin/access-policy` | `{available, unavailable_reason, has_policy, expression}` (admin) |
-| PUT | `/api/v1/admin/access-policy` | Save rule; body `{expression}`; same response as GET |
-| DELETE | `/api/v1/admin/access-policy` | Remove rule; same response as GET |
+| GET | `/api/v1/admin/access-policy` | `{available, unavailable_reason, has_policy, policy_unknown, expression}` (admin); `policy_unknown` is true when the read returned 501 (engine not registered), so a stored rule may exist |
+| PUT | `/api/v1/admin/access-policy` | Save rule; body `{expression}`; same response as GET, built from the saved policy (no re-read) |
+| DELETE | `/api/v1/admin/access-policy` | Remove rule; same response as GET (`has_policy` false). Only a 404 upstream counts as already absent; a 501 is returned as an error (rule still stored) |
 | POST | `/api/v1/admin/access-policy/check` | `{errors: [{line, column, message}]}` |
 | POST | `/api/v1/admin/access-policy/visual-ast` | `model.VisualExpression` |
 | GET | `/api/v1/admin/access-policy/fields?after=&limit=` | `[]model.PropertyField` |

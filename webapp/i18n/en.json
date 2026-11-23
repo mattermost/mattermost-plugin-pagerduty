@@ -79,6 +79,8 @@
     "pagerduty.admin.accessPolicy.remove": "Remove rule",
     "pagerduty.admin.accessPolicy.saved": "Access rule saved.",
     "pagerduty.admin.accessPolicy.removed": "Access rule removed. Everyone can use the plugin.",
+    "pagerduty.admin.accessPolicy.blockingTitle": "A stored access rule may currently be blocking all users.",
+    "pagerduty.admin.accessPolicy.blockingMessage": "A rule that cannot be evaluated denies access to everyone. Re-enable attribute-based access control or remove the rule to restore access.",
     "pagerduty.sidebar.noAccess.title": "You don't have access to the PagerDuty plugin",
     "pagerduty.sidebar.noAccess.message": "A system administrator has restricted this plugin to specific users. Contact your administrator if you think this is a mistake."
 }

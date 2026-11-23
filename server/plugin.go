@@ -88,6 +88,10 @@ type Plugin struct {
 	accessResourceID     string
 	accessResourceIDLock sync.Mutex
 
+	// accessCache holds short-lived per-user ABAC decisions. accessClock overrides time.Now in tests.
+	accessCache accessDecisionCache
+	accessClock func() time.Time
+
 	// refreshLockTimeoutOverride, when set, replaces tokenRefreshLockTimeout. Used in tests.
 	refreshLockTimeoutOverride time.Duration
 }

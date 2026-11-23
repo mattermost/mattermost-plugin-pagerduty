@@ -6,10 +6,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
@@ -342,6 +344,7 @@ func TestHandleGetAccessPolicy(t *testing.T) {
 			"available":          true,
 			"unavailable_reason": "",
 			"has_policy":         true,
+			"policy_unknown":     false,
 			"expression":         `user.attributes.team == "sre"`,
 		}, decodeBody(t, w))
 	})
@@ -357,11 +360,12 @@ func TestHandleGetAccessPolicy(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		body := decodeBody(t, w)
 		assert.Equal(t, false, body["has_policy"])
+		assert.Equal(t, false, body["policy_unknown"])
 		assert.Equal(t, "", body["expression"])
 		assert.Equal(t, true, body["available"])
 	})
 
-	t.Run("no policy when engine not implemented", func(t *testing.T) {
+	t.Run("policy unknown when engine not implemented", func(t *testing.T) {
 		p, api := newAccessTestPlugin(t)
 		mockAdmin(api)
 		api.On("GetLicense").Return((*model.License)(nil))
@@ -370,9 +374,13 @@ func TestHandleGetAccessPolicy(t *testing.T) {
 
 		w := doAccessRequest(p, http.MethodGet, "/api/v1/admin/access-policy", testAdminID, "")
 		require.Equal(t, http.StatusOK, w.Code)
-		body := decodeBody(t, w)
-		assert.Equal(t, false, body["has_policy"])
-		assert.Equal(t, false, body["available"])
+		assert.Equal(t, map[string]any{
+			"available":          false,
+			"unavailable_reason": "Attribute-based access control requires a Mattermost Enterprise Advanced or Entry license.",
+			"has_policy":         false,
+			"policy_unknown":     true,
+			"expression":         "",
+		}, decodeBody(t, w))
 	})
 
 	t.Run("unavailable without license", func(t *testing.T) {
@@ -412,20 +420,19 @@ func TestHandleGetAccessPolicy(t *testing.T) {
 	})
 }
 
-func expectPolicyStatusLookup(api *plugintest.API, expression string) {
-	api.On("GetLicense").Return(&model.License{SkuShortName: model.LicenseShortSkuEnterpriseAdvanced})
-	api.On("GetConfig").Return(abacConfig(true))
-	if expression == "" {
-		api.On("GetAccessControlPolicy", testResource).Return((*model.AccessControlPolicy)(nil), model.NewAppError("t", "nf", nil, "", http.StatusNotFound))
-		return
-	}
-	api.On("GetAccessControlPolicy", testResource).Return(&model.AccessControlPolicy{
-		Rules: []model.AccessControlPolicyRule{{Actions: []string{"view"}, Expression: expression}},
-	}, (*model.AppError)(nil))
-}
-
 func expectChangedEvent(api *plugintest.API) {
 	api.On("PublishWebSocketEvent", "access_policy_changed", map[string]any{}, &model.WebsocketBroadcast{}).Return().Once()
+}
+
+func expectClusterInvalidation(api *plugintest.API) {
+	api.On("PublishPluginClusterEvent",
+		model.PluginClusterEvent{Id: clusterEventAccessCacheInvalidate},
+		model.PluginClusterEventSendOptions{SendType: model.PluginClusterEventSendTypeReliable}).Return(nil).Once()
+}
+
+func expectAvailability(api *plugintest.API) {
+	api.On("GetLicense").Return(&model.License{SkuShortName: model.LicenseShortSkuEnterpriseAdvanced})
+	api.On("GetConfig").Return(abacConfig(true))
 }
 
 func TestHandleSaveAccessPolicy(t *testing.T) {
@@ -442,16 +449,37 @@ func TestHandleSaveAccessPolicy(t *testing.T) {
 				len(policy.Rules) == 1 &&
 				assert.ObjectsAreEqual([]string{"view"}, policy.Rules[0].Actions) &&
 				policy.Rules[0].Expression == `user.attributes.team == "sre"`
-		})).Return(&model.AccessControlPolicy{}, (*model.AppError)(nil)).Once()
+		})).Return(&model.AccessControlPolicy{
+			Rules: []model.AccessControlPolicyRule{{Actions: []string{"view"}, Expression: `user.attributes.team == "sre"`}},
+		}, (*model.AppError)(nil)).Once()
 		expectChangedEvent(api)
-		expectPolicyStatusLookup(api, `user.attributes.team == "sre"`)
+		expectClusterInvalidation(api)
+		expectAvailability(api)
 
 		w := doAccessRequest(p, http.MethodPut, "/api/v1/admin/access-policy", testAdminID, `{"expression":"  user.attributes.team == \"sre\"  "}`)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		body := decodeBody(t, w)
 		assert.Equal(t, true, body["has_policy"])
 		assert.Equal(t, `user.attributes.team == "sre"`, body["expression"])
+		assert.Equal(t, false, body["policy_unknown"])
 		api.AssertNumberOfCalls(t, "PublishWebSocketEvent", 1)
+		api.AssertNotCalled(t, "GetAccessControlPolicy", mock.Anything)
+	})
+
+	t.Run("nil saved policy falls back to the request expression without re-reading", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		mockAdmin(api)
+		api.On("SaveAccessControlPolicy", testAdminID, mock.Anything).Return((*model.AccessControlPolicy)(nil), (*model.AppError)(nil)).Once()
+		expectChangedEvent(api)
+		expectClusterInvalidation(api)
+		expectAvailability(api)
+
+		w := doAccessRequest(p, http.MethodPut, "/api/v1/admin/access-policy", testAdminID, `{"expression":"true"}`)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		body := decodeBody(t, w)
+		assert.Equal(t, true, body["has_policy"])
+		assert.Equal(t, "true", body["expression"])
+		api.AssertNotCalled(t, "GetAccessControlPolicy", mock.Anything)
 	})
 
 	t.Run("empty expression is 400", func(t *testing.T) {
@@ -492,7 +520,8 @@ func TestHandleDeleteAccessPolicy(t *testing.T) {
 		mockAdmin(api)
 		api.On("DeleteAccessControlPolicy", testAdminID, testPluginTyp, testResource).Return((*model.AppError)(nil)).Once()
 		expectChangedEvent(api)
-		expectPolicyStatusLookup(api, "")
+		expectClusterInvalidation(api)
+		expectAvailability(api)
 
 		w := doAccessRequest(p, http.MethodDelete, "/api/v1/admin/access-policy", testAdminID, "")
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -500,6 +529,23 @@ func TestHandleDeleteAccessPolicy(t *testing.T) {
 		assert.Equal(t, false, body["has_policy"])
 		assert.Equal(t, "", body["expression"])
 		api.AssertNumberOfCalls(t, "PublishWebSocketEvent", 1)
+		api.AssertNotCalled(t, "GetAccessControlPolicy", mock.Anything)
+	})
+
+	t.Run("engine not implemented is an error, rule remains, nothing published", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		mockAdmin(api)
+		api.On("DeleteAccessControlPolicy", testAdminID, testPluginTyp, testResource).
+			Return(model.NewAppError("t", "ni", nil, "", http.StatusNotImplemented)).Once()
+
+		w := doAccessRequest(p, http.MethodDelete, "/api/v1/admin/access-policy", testAdminID, "")
+		require.Equal(t, http.StatusNotImplemented, w.Code)
+		body := decodeBody(t, w)
+		assert.Equal(t, "api.pagerduty.access_policy.error", body["id"])
+		assert.Contains(t, body["message"], "not available on this server")
+		assert.Contains(t, body["message"], "still in place")
+		api.AssertNotCalled(t, "PublishWebSocketEvent", mock.Anything, mock.Anything, mock.Anything)
+		api.AssertNotCalled(t, "PublishPluginClusterEvent", mock.Anything, mock.Anything)
 	})
 
 	t.Run("deleting when none exists succeeds", func(t *testing.T) {
@@ -508,7 +554,8 @@ func TestHandleDeleteAccessPolicy(t *testing.T) {
 		api.On("DeleteAccessControlPolicy", testAdminID, testPluginTyp, testResource).
 			Return(model.NewAppError("t", "nf", nil, "", http.StatusNotFound)).Once()
 		expectChangedEvent(api)
-		expectPolicyStatusLookup(api, "")
+		expectClusterInvalidation(api)
+		expectAvailability(api)
 
 		w := doAccessRequest(p, http.MethodDelete, "/api/v1/admin/access-policy", testAdminID, "")
 		require.Equal(t, http.StatusOK, w.Code)
@@ -683,5 +730,157 @@ func TestExecuteCommandAccessControl(t *testing.T) {
 		resp, appErr := p.ExecuteCommand(nil, &model.CommandArgs{Command: "/pagerduty help", UserId: testUserID})
 		require.Nil(t, appErr)
 		assert.Contains(t, resp.Text, "PagerDuty Plugin Commands")
+	})
+}
+
+func fixedClock(now *time.Time) func() time.Time {
+	return func() time.Time { return *now }
+}
+
+func allowDecision(api *plugintest.API, times int) {
+	api.On("EvaluateAccessControl", testUserID, testPluginTyp, testResource, "view").
+		Return(&model.AccessDecision{Decision: true}, (*model.AppError)(nil)).Times(times)
+}
+
+func TestAccessDecisionCache(t *testing.T) {
+	t.Run("hit avoids a second evaluation", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		allowDecision(api, 1)
+
+		assert.True(t, p.userHasAccess(testUserID))
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 1)
+	})
+
+	t.Run("denials and no-policy allows from real decisions are cached", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		noPolicy := model.NewNoPolicyAccessDecision()
+		api.On("EvaluateAccessControl", testUserID, testPluginTyp, testResource, "view").
+			Return(&model.AccessDecision{Decision: false}, (*model.AppError)(nil)).Once()
+		api.On("EvaluateAccessControl", "other", testPluginTyp, testResource, "view").
+			Return(&noPolicy, (*model.AppError)(nil)).Once()
+
+		assert.False(t, p.userHasAccess(testUserID))
+		assert.False(t, p.userHasAccess(testUserID))
+		assert.True(t, p.userHasAccess("other"))
+		assert.True(t, p.userHasAccess("other"))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 2)
+	})
+
+	t.Run("expiry re-evaluates", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		allowDecision(api, 2)
+
+		assert.True(t, p.userHasAccess(testUserID))
+		now = now.Add(accessDecisionTTL - time.Second)
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 1)
+
+		now = now.Add(2 * time.Second)
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 2)
+	})
+
+	t.Run("errors and nil decisions are not cached", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		api.On("EvaluateAccessControl", testUserID, testPluginTyp, testResource, "view").
+			Return((*model.AccessDecision)(nil), model.NewAppError("t", "err", nil, "boom", http.StatusInternalServerError)).Once()
+		api.On("EvaluateAccessControl", testUserID, testPluginTyp, testResource, "view").
+			Return((*model.AccessDecision)(nil), (*model.AppError)(nil)).Once()
+		allowDecision(api, 1)
+
+		assert.False(t, p.userHasAccess(testUserID))
+		assert.False(t, p.userHasAccess(testUserID))
+		assert.True(t, p.userHasAccess(testUserID))
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 3)
+		assert.Equal(t, 1, p.accessCache.len())
+	})
+
+	t.Run("resource ID failures are not cached", func(t *testing.T) {
+		p, _ := newAccessTestPlugin(t)
+		p.kvstore = &mockKVStore{getAccessResourceIDFunc: func() (string, error) { return "", errors.New("kv down") }}
+
+		assert.False(t, p.userHasAccess(testUserID))
+		assert.Equal(t, 0, p.accessCache.len())
+	})
+
+	t.Run("save and delete invalidate the cache", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		mockAdmin(api)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		allowDecision(api, 3)
+		api.On("SaveAccessControlPolicy", testAdminID, mock.Anything).Return(&model.AccessControlPolicy{}, (*model.AppError)(nil)).Once()
+		api.On("DeleteAccessControlPolicy", testAdminID, testPluginTyp, testResource).Return((*model.AppError)(nil)).Once()
+		api.On("PublishWebSocketEvent", "access_policy_changed", map[string]any{}, &model.WebsocketBroadcast{}).Return().Twice()
+		api.On("PublishPluginClusterEvent", mock.Anything, mock.Anything).Return(nil).Twice()
+		api.On("GetLicense").Return(&model.License{SkuShortName: model.LicenseShortSkuEnterpriseAdvanced}).Twice()
+		api.On("GetConfig").Return(abacConfig(true)).Twice()
+
+		assert.True(t, p.userHasAccess(testUserID))
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 1)
+
+		w := doAccessRequest(p, http.MethodPut, "/api/v1/admin/access-policy", testAdminID, `{"expression":"true"}`)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 2)
+
+		w = doAccessRequest(p, http.MethodDelete, "/api/v1/admin/access-policy", testAdminID, "")
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 3)
+	})
+
+	t.Run("cluster event invalidates the cache", func(t *testing.T) {
+		p, api := newAccessTestPlugin(t)
+		now := time.Now()
+		p.accessClock = fixedClock(&now)
+		allowDecision(api, 2)
+
+		assert.True(t, p.userHasAccess(testUserID))
+		p.OnPluginClusterEvent(nil, model.PluginClusterEvent{Id: "something_else"})
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 1)
+
+		p.OnPluginClusterEvent(nil, model.PluginClusterEvent{Id: clusterEventAccessCacheInvalidate})
+		assert.True(t, p.userHasAccess(testUserID))
+		api.AssertNumberOfCalls(t, "EvaluateAccessControl", 2)
+	})
+
+	t.Run("a decision computed before an invalidation is not stored", func(t *testing.T) {
+		var c accessDecisionCache
+		now := time.Now()
+		_, _, gen := c.get(testUserID, now)
+		c.clear()
+		c.set(testUserID, true, now, gen)
+		assert.Equal(t, 0, c.len())
+	})
+
+	t.Run("size is bounded and expired entries are dropped", func(t *testing.T) {
+		var c accessDecisionCache
+		now := time.Now()
+		for i := range accessDecisionCacheMaxEntries {
+			c.set(fmt.Sprintf("u%d", i), true, now, 0)
+		}
+		assert.Equal(t, accessDecisionCacheMaxEntries, c.len())
+
+		later := now.Add(accessDecisionTTL + time.Second)
+		c.set("fresh", true, later, 0)
+		assert.Equal(t, 1, c.len())
+
+		for i := range accessDecisionCacheMaxEntries + 5 {
+			c.set(fmt.Sprintf("v%d", i), true, later, 0)
+		}
+		assert.LessOrEqual(t, c.len(), accessDecisionCacheMaxEntries)
 	})
 }

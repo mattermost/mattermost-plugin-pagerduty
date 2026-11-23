@@ -292,6 +292,9 @@ export interface AccessPolicyState {
     available: boolean;
     unavailable_reason: string;
     has_policy: boolean;
+
+    // True when the server could not read whether a rule is stored because ABAC is unavailable.
+    policy_unknown: boolean;
     expression: string;
 }
 

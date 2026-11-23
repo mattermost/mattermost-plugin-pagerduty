@@ -3,7 +3,7 @@
 
 import React from 'react';
 
-import AccessPolicySetting from './access_policy_setting';
+import AccessPolicySetting, {MAX_FIELD_PAGES} from './access_policy_setting';
 
 import client from '@/client/client';
 import {render, screen, waitFor, fireEvent} from '@/test-utils';
@@ -16,6 +16,7 @@ const policyState = (overrides: Partial<AccessPolicyState> = {}): AccessPolicySt
     available: true,
     unavailable_reason: '',
     has_policy: false,
+    policy_unknown: false,
     expression: '',
     ...overrides,
 });
@@ -200,5 +201,181 @@ describe('AccessPolicySetting', () => {
         fireEvent.click(screen.getByText('call-check'));
         await waitFor(() => expect(mockClient.checkAccessPolicyExpression).toHaveBeenCalled());
         await waitFor(() => expect(screen.getByLabelText('cel-expression')).toHaveValue('errors:1'));
+    });
+
+    describe('when ABAC is unavailable', () => {
+        const unavailable = (o: Partial<AccessPolicyState> = {}) => policyState({available: false, unavailable_reason: 'ABAC is disabled.', ...o});
+
+        it('shows the blocking warning and Remove when a rule is stored', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(unavailable({has_policy: true}));
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-unavailable')).toBeInTheDocument();
+            expect(screen.getByTestId('pagerduty-access-blocking')).toHaveTextContent(/may currently be blocking all users/);
+            expect(screen.getByRole('button', {name: 'Remove rule'})).toBeEnabled();
+            expect(screen.queryByRole('button', {name: 'Save rule'})).not.toBeInTheDocument();
+            expect(screen.queryByTestId('table-editor')).not.toBeInTheDocument();
+        });
+
+        it('shows the blocking warning and Remove when the rule state is unknown', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(unavailable({policy_unknown: true}));
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-blocking')).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Remove rule'})).toBeEnabled();
+        });
+
+        it('hides the warning and Remove when there is neither a rule nor an unknown state', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(unavailable());
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-unavailable')).toBeInTheDocument();
+            expect(screen.queryByTestId('pagerduty-access-blocking')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: 'Remove rule'})).not.toBeInTheDocument();
+        });
+
+        it('shows the server message inline when Remove fails', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(unavailable({policy_unknown: true}));
+            mockClient.deleteAccessPolicy.mockRejectedValueOnce(new Error('The access rule could not be removed.'));
+
+            render(<AccessPolicySetting/>);
+            fireEvent.click(await screen.findByRole('button', {name: 'Remove rule'}));
+
+            expect(await screen.findByTestId('pagerduty-access-error')).toHaveTextContent('The access rule could not be removed.');
+            expect(screen.getByTestId('pagerduty-access-blocking')).toBeInTheDocument();
+        });
+
+        it('clears the warning after a successful removal', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(unavailable({has_policy: true}));
+            mockClient.deleteAccessPolicy.mockResolvedValueOnce(unavailable());
+
+            render(<AccessPolicySetting/>);
+            fireEvent.click(await screen.findByRole('button', {name: 'Remove rule'}));
+
+            expect(await screen.findByTestId('pagerduty-access-notice')).toBeInTheDocument();
+            expect(screen.queryByTestId('pagerduty-access-blocking')).not.toBeInTheDocument();
+        });
+    });
+
+    it('enables Remove when the rule state is unknown while available', async () => {
+        mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({policy_unknown: true}));
+        render(<AccessPolicySetting/>);
+        expect(await screen.findByRole('button', {name: 'Remove rule'})).toBeEnabled();
+    });
+
+    describe('usable attributes banner', () => {
+        it('is shown when the server returns no fields', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.mockResolvedValue([]);
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-no-attributes')).toBeInTheDocument();
+        });
+
+        it('is shown when none of the fields is usable', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.mockResolvedValue([{id: 'f1', name: 'team', attrs: {}}]);
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-no-attributes')).toBeInTheDocument();
+        });
+
+        it('is hidden when usable fields exist', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+
+            render(<AccessPolicySetting/>);
+            await screen.findByTestId('table-editor');
+
+            expect(screen.queryByTestId('pagerduty-access-no-attributes')).not.toBeInTheDocument();
+        });
+
+        it('is hidden while loading', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.mockReturnValue(new Promise(() => {}));
+
+            render(<AccessPolicySetting/>);
+            await waitFor(() => expect(mockClient.getAccessPolicyFields).toHaveBeenCalled());
+
+            expect(screen.queryByTestId('pagerduty-access-no-attributes')).not.toBeInTheDocument();
+        });
+
+        it('is hidden when the fields request failed, which has its own banner', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.mockRejectedValue(new Error('boom'));
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-fields-error')).toHaveTextContent('boom');
+            expect(screen.queryByTestId('pagerduty-access-no-attributes')).not.toBeInTheDocument();
+        });
+    });
+
+    describe('fields pagination', () => {
+        const page = (start: number, n: number) => Array.from({length: n}, (_, i) => ({id: `f${start + i}`, name: `a${start + i}`, attrs: {managed: 'admin'}}));
+
+        it('follows the after cursor until a short page', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.
+                mockResolvedValueOnce(page(0, 100)).
+                mockResolvedValueOnce(page(100, 100)).
+                mockResolvedValueOnce(page(200, 3));
+
+            render(<AccessPolicySetting/>);
+            await screen.findByTestId('table-editor');
+
+            expect(mockClient.getAccessPolicyFields.mock.calls).toEqual([['', 100], ['f99', 100], ['f199', 100]]);
+        });
+
+        it('passes every page of fields to the editor', async () => {
+            const seen: number[] = [];
+            window.Components = {
+                AccessControlTableEditor: (props: any) => {
+                    seen.push(props.userAttributes.length);
+                    return <div data-testid='table-editor'/>;
+                },
+                AccessControlCELEditor: StubCEL,
+            };
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.
+                mockResolvedValueOnce(page(0, 100)).
+                mockResolvedValueOnce(page(100, 5));
+
+            render(<AccessPolicySetting/>);
+            await screen.findByTestId('table-editor');
+
+            expect(seen[seen.length - 1]).toBe(105);
+        });
+
+        it('stops after a full page followed by an empty page', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            mockClient.getAccessPolicyFields.
+                mockResolvedValueOnce(page(0, 100)).
+                mockResolvedValueOnce([]);
+
+            render(<AccessPolicySetting/>);
+            await screen.findByTestId('table-editor');
+
+            expect(mockClient.getAccessPolicyFields).toHaveBeenCalledTimes(2);
+        });
+
+        it('caps the number of pages when the server keeps returning full pages', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState());
+            let n = 0;
+            mockClient.getAccessPolicyFields.mockImplementation(async () => {
+                const p = page(n * 100, 100);
+                n++;
+                return p;
+            });
+
+            render(<AccessPolicySetting/>);
+            await screen.findByTestId('table-editor');
+
+            expect(mockClient.getAccessPolicyFields).toHaveBeenCalledTimes(MAX_FIELD_PAGES);
+        });
     });
 });

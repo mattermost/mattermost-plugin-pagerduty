@@ -21,7 +21,24 @@ beforeAll(async () => {
     PluginClass = (await import('./index')).default as any;
 });
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+// Advances fake timers and lets pending promise callbacks run.
+const tick = async (ms = 0) => {
+    jest.advanceTimersByTime(ms);
+    await Promise.all(Array.from({length: 20}, () => Promise.resolve()));
+};
+const flush = () => tick(0);
+
+beforeEach(() => {
+    jest.useFakeTimers();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockClient.getAccess.mockReset();
+});
+
+afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+});
 
 function setup() {
     let n = 0;
@@ -62,6 +79,7 @@ describe('Plugin registration', () => {
         const {registry, store} = setup();
 
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         expect(registry.registerAdminConsoleCustomSetting).toHaveBeenCalledWith('AccessPolicy', expect.anything(), {showTitle: true});
         registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
@@ -74,6 +92,7 @@ describe('Plugin registration', () => {
         const {registry, store} = setup();
 
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         registerCalls(registry).forEach((fn) => expect(fn).toHaveBeenCalledTimes(1));
         expect(registry.registerAdminConsoleCustomSetting).toHaveBeenCalledTimes(1);
@@ -84,21 +103,12 @@ describe('Plugin registration', () => {
         expect(store.dispatch).toHaveBeenCalledWith({type: 'toggle'});
     });
 
-    it('treats a failed access check as denied', async () => {
-        mockClient.getAccess.mockRejectedValue(new Error('network'));
-        const {registry, store} = setup();
-
-        await new PluginClass().initialize(registry as any, store);
-
-        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
-        expect(registry.registerAdminConsoleCustomSetting).toHaveBeenCalled();
-    });
-
     it('registers on a later reconnect after an initial failure', async () => {
         mockClient.getAccess.mockRejectedValueOnce(new Error('network'));
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
         const {registry, store, fireReconnect} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
         expect(registry.registerRootComponent).not.toHaveBeenCalled();
 
         fireReconnect();
@@ -111,6 +121,7 @@ describe('Plugin registration', () => {
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
         const {registry, store, handlers, hideAction} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         mockClient.getAccess.mockResolvedValueOnce({allowed: false});
         handlers[EVENT]();
@@ -126,6 +137,7 @@ describe('Plugin registration', () => {
         mockClient.getAccess.mockResolvedValueOnce({allowed: false});
         const {registry, store, handlers} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
         handlers[EVENT]();
@@ -138,6 +150,7 @@ describe('Plugin registration', () => {
         mockClient.getAccess.mockResolvedValue({allowed: true});
         const {registry, store, handlers, fireReconnect} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         handlers[EVENT]();
         handlers[EVENT]();
@@ -152,6 +165,7 @@ describe('Plugin registration', () => {
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
         const {registry, store, handlers} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         mockClient.getAccess.mockResolvedValue({allowed: false});
         handlers[EVENT]();
@@ -163,8 +177,9 @@ describe('Plugin registration', () => {
 
     it('lets the newest check win when responses arrive out of order', async () => {
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
-        const {registry, store, handlers} = setup();
+        const {registry, store, fireReconnect} = setup();
         await new PluginClass().initialize(registry as any, store);
+        await flush();
 
         // First check (stale) resolves to denied only after the second (newer) one resolved to allowed.
         let resolveStale: (v: {allowed: boolean}) => void = () => {};
@@ -172,12 +187,174 @@ describe('Plugin registration', () => {
             resolveStale = resolve;
         }));
         mockClient.getAccess.mockResolvedValueOnce({allowed: true});
-        handlers[EVENT]();
-        handlers[EVENT]();
+        fireReconnect();
+        fireReconnect();
         await flush();
         resolveStale({allowed: false});
         await flush();
 
         expect(registry.unregisterComponent).not.toHaveBeenCalled();
+    });
+});
+
+describe('Plugin access check resilience', () => {
+    const RETRY_DELAYS = [2000, 5000, 15000, 30000];
+
+    it('initialize resolves without waiting for /access', async () => {
+        mockClient.getAccess.mockReturnValue(new Promise(() => {}));
+        const {registry, store} = setup();
+
+        await expect(new PluginClass().initialize(registry as any, store)).resolves.toBeUndefined();
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not register on a first-load error and retries on the backoff schedule, then stops', async () => {
+        mockClient.getAccess.mockRejectedValue(new Error('network'));
+        const {registry, store} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+
+        let calls = 1;
+        for (const delay of RETRY_DELAYS) {
+            // eslint-disable-next-line no-await-in-loop
+            await tick(delay - 1);
+            expect(mockClient.getAccess).toHaveBeenCalledTimes(calls);
+            // eslint-disable-next-line no-await-in-loop
+            await tick(1);
+            calls++;
+            expect(mockClient.getAccess).toHaveBeenCalledTimes(calls);
+        }
+
+        await tick(10 * 60 * 1000);
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(5);
+        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    });
+
+    it('registers when a retry succeeds', async () => {
+        mockClient.getAccess.mockRejectedValueOnce(new Error('network'));
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        const {registry, store} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        await tick(2000);
+
+        registerCalls(registry).forEach((fn) => expect(fn).toHaveBeenCalledTimes(1));
+    });
+
+    it('keeps the UI when a check fails after registration, and retries', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        const {registry, store, fireReconnect} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        mockClient.getAccess.mockRejectedValueOnce(new Error('503'));
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        fireReconnect();
+        await flush();
+        expect(registry.unregisterComponent).not.toHaveBeenCalled();
+
+        await tick(2000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(3);
+        expect(registry.unregisterComponent).not.toHaveBeenCalled();
+        registerCalls(registry).forEach((fn) => expect(fn).toHaveBeenCalledTimes(1));
+    });
+
+    it('still unregisters on an explicit denial found by a retry', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        const {registry, store, fireReconnect} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        mockClient.getAccess.mockRejectedValueOnce(new Error('503'));
+        mockClient.getAccess.mockResolvedValueOnce({allowed: false});
+        fireReconnect();
+        await flush();
+        expect(registry.unregisterComponent).not.toHaveBeenCalled();
+
+        await tick(2000);
+
+        expect(registry.unregisterComponent).toHaveBeenCalledTimes(4);
+    });
+
+    it('a newer check cancels pending retries', async () => {
+        mockClient.getAccess.mockRejectedValueOnce(new Error('network'));
+        const {registry, store, fireReconnect} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        // A retry is now pending; the reconnect check succeeds and must cancel it.
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        fireReconnect();
+        await flush();
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+
+        await tick(60000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+        registerCalls(registry).forEach((fn) => expect(fn).toHaveBeenCalledTimes(1));
+    });
+
+    it('a stale failure does not schedule a retry once a newer check started', async () => {
+        let rejectStale: (e: Error) => void = () => {};
+        mockClient.getAccess.mockReturnValueOnce(new Promise((_, reject) => {
+            rejectStale = reject;
+        }));
+        const {registry, store, fireReconnect} = setup();
+        await new PluginClass().initialize(registry as any, store);
+
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        fireReconnect();
+        await flush();
+        rejectStale(new Error('late'));
+        await flush();
+        await tick(60000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+    });
+
+    it('jitters the re-check after the websocket event by 0-3s', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        const {registry, store, handlers} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+
+        (Math.random as jest.Mock).mockReturnValue(0.5);
+        mockClient.getAccess.mockResolvedValueOnce({allowed: false});
+        handlers[EVENT]();
+        await tick(1499);
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+        await tick(1);
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+        expect(registry.unregisterComponent).toHaveBeenCalledTimes(4);
+    });
+
+    it('does not jitter reconnect re-checks', async () => {
+        mockClient.getAccess.mockResolvedValue({allowed: true});
+        const {registry, store, fireReconnect} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        (Math.random as jest.Mock).mockReturnValue(0.99);
+        fireReconnect();
+        await flush();
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+    });
+
+    it('collapses repeated events into one jittered check', async () => {
+        mockClient.getAccess.mockResolvedValue({allowed: true});
+        const {registry, store, handlers} = setup();
+        await new PluginClass().initialize(registry as any, store);
+        await flush();
+
+        handlers[EVENT]();
+        handlers[EVENT]();
+        await tick(3000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
     });
 });

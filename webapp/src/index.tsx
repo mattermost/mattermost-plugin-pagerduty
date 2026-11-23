@@ -39,6 +39,9 @@ const Icon = () => (
 
 export const ACCESS_POLICY_CHANGED_EVENT = `custom_${manifest.id}_access_policy_changed`;
 
+const ACCESS_RETRY_DELAYS_MS = [2000, 5000, 15000, 30000];
+const ACCESS_RECHECK_JITTER_MS = 3000;
+
 interface Registered {
     rhsId: string;
     headerButtonId: string;
@@ -59,6 +62,11 @@ export default class Plugin {
     // Incremented per access check so a slow, stale response cannot overwrite a newer one.
     private checkSeq = 0;
 
+    // Pending timers: a retry after a failed check, and the jittered delay before
+    // the re-check that follows a policy-changed event. A newer check cancels both.
+    private retryTimer: ReturnType<typeof setTimeout> | null = null;
+    private jitterTimer: ReturnType<typeof setTimeout> | null = null;
+
     public async initialize(registry: PluginRegistry, store: Store<GlobalState, Action<Record<string, unknown>>>) {
         this.registry = registry;
         this.store = store;
@@ -68,26 +76,52 @@ export default class Plugin {
 
         // Converge on server-side policy changes and after reconnects.
         registry.registerWebSocketEventHandler(ACCESS_POLICY_CHANGED_EVENT, () => {
-            this.refreshAccess();
+            // Spread the re-checks of all connected clients over a few seconds.
+            this.cancelPending();
+            this.jitterTimer = setTimeout(() => {
+                this.jitterTimer = null;
+                this.refreshAccess();
+            }, Math.random() * ACCESS_RECHECK_JITTER_MS);
         });
         registry.registerReconnectHandler(() => {
+            this.cancelPending();
             this.refreshAccess();
         });
 
-        await this.refreshAccess();
+        // Do not block plugin initialization on the network.
+        this.refreshAccess();
+    }
+
+    private cancelPending() {
+        if (this.retryTimer !== null) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+        }
+        if (this.jitterTimer !== null) {
+            clearTimeout(this.jitterTimer);
+            this.jitterTimer = null;
+        }
     }
 
     // Asks the server whether the current user may use the plugin and registers or
-    // unregisters the UI accordingly. Any failure is treated as "not allowed"; the
-    // next reconnect or websocket event retries.
-    private async refreshAccess() {
+    // unregisters the UI accordingly. Only an explicit answer changes the UI: on an
+    // error the current state is kept and the check is retried with capped backoff,
+    // after which the next reconnect or websocket event retries.
+    private async refreshAccess(attempt = 0) {
+        this.cancelPending();
         const seq = ++this.checkSeq;
-        let allowed = false;
+        let allowed: boolean;
         try {
             const response = await client.getAccess();
             allowed = response.allowed === true;
         } catch {
-            allowed = false;
+            if (seq === this.checkSeq && attempt < ACCESS_RETRY_DELAYS_MS.length) {
+                this.retryTimer = setTimeout(() => {
+                    this.retryTimer = null;
+                    this.refreshAccess(attempt + 1);
+                }, ACCESS_RETRY_DELAYS_MS[attempt]);
+            }
+            return;
         }
         if (seq !== this.checkSeq) {
             return;

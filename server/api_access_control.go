@@ -26,6 +26,7 @@ type accessPolicyStatus struct {
 	Available         bool   `json:"available"`
 	UnavailableReason string `json:"unavailable_reason"`
 	HasPolicy         bool   `json:"has_policy"`
+	PolicyUnknown     bool   `json:"policy_unknown"`
 	Expression        string `json:"expression"`
 }
 
@@ -108,18 +109,22 @@ func (p *Plugin) handleSaveAccessPolicy(w http.ResponseWriter, r *http.Request) 
 		}},
 	}
 
-	if _, appErr := p.API.SaveAccessControlPolicy(userID, policy); appErr != nil {
+	saved, appErr := p.API.SaveAccessControlPolicy(userID, policy)
+	if appErr != nil {
 		p.handleError(w, r, p.upstreamAccessError("Failed to save the access policy", appErr))
 		return
 	}
 
+	p.invalidateAccessCache()
 	p.publishAccessPolicyChanged()
 
-	status, apiErr := p.currentAccessPolicyStatus()
-	if apiErr != nil {
-		p.handleError(w, r, apiErr)
-		return
+	// Build the response from the mutation result: the save succeeded, so a follow-up read
+	// must not be able to turn it into a failure.
+	status := &accessPolicyStatus{HasPolicy: true, Expression: expression}
+	if saved != nil && len(saved.Rules) > 0 && saved.Rules[0].Expression != "" {
+		status.Expression = saved.Rules[0].Expression
 	}
+	status.Available, status.UnavailableReason = p.accessControlAvailability()
 	p.writeAccessJSON(w, status)
 }
 
@@ -134,17 +139,26 @@ func (p *Plugin) handleDeleteAccessPolicy(w http.ResponseWriter, r *http.Request
 	}
 
 	if appErr := p.API.DeleteAccessControlPolicy(userID, accessResourceType(), resourceID); appErr != nil && !isAccessPolicyAbsent(appErr) {
+		if appErr.StatusCode == http.StatusNotImplemented {
+			// The engine is not registered, so nothing was removed: do not claim success.
+			p.client.Log.Warn("Failed to delete the access policy: access control engine unavailable", "error", appErr.Error())
+			p.handleError(w, r, &APIError{
+				ID:         accessAdminErrorID,
+				Message:    "The access rule could not be removed because attribute-based access control is not available on this server. The stored rule is still in place.",
+				StatusCode: http.StatusNotImplemented,
+			})
+			return
+		}
 		p.handleError(w, r, p.upstreamAccessError("Failed to delete the access policy", appErr))
 		return
 	}
 
+	p.invalidateAccessCache()
 	p.publishAccessPolicyChanged()
 
-	status, apiErr := p.currentAccessPolicyStatus()
-	if apiErr != nil {
-		p.handleError(w, r, apiErr)
-		return
-	}
+	// The delete succeeded (or the policy was already absent), so report no policy directly.
+	status := &accessPolicyStatus{}
+	status.Available, status.UnavailableReason = p.accessControlAvailability()
 	p.writeAccessJSON(w, status)
 }
 
@@ -245,7 +259,12 @@ func (p *Plugin) currentAccessPolicyStatus() (*accessPolicyStatus, *APIError) {
 
 	policy, appErr := p.API.GetAccessControlPolicy(resourceID)
 	if appErr != nil {
-		if isAccessPolicyAbsent(appErr) {
+		switch appErr.StatusCode {
+		case http.StatusNotFound:
+			return status, nil
+		case http.StatusNotImplemented:
+			// The engine is not registered: a stored rule may exist but cannot be read.
+			status.PolicyUnknown = true
 			return status, nil
 		}
 		return nil, p.upstreamAccessError("Failed to read the access policy", appErr)
@@ -270,10 +289,10 @@ func (p *Plugin) accessControlAvailability() (bool, string) {
 	return true, ""
 }
 
-// isAccessPolicyAbsent reports whether an upstream error means no policy exists (not found),
-// or that the access control engine is not registered (not implemented), so none can exist.
+// isAccessPolicyAbsent reports whether an upstream error means no policy exists (not found).
+// A 501 (engine not registered) is deliberately not "absent": a stored rule may still exist.
 func isAccessPolicyAbsent(appErr *model.AppError) bool {
-	return appErr.StatusCode == http.StatusNotFound || appErr.StatusCode == http.StatusNotImplemented
+	return appErr.StatusCode == http.StatusNotFound
 }
 
 // upstreamAccessError converts an upstream AppError, preserving its status code and message.

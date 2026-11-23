@@ -16,6 +16,30 @@ import type {AccessPolicyField, AccessPolicyState} from '@/types/pagerduty';
 
 type EditorMode = 'simple' | 'advanced';
 
+const FIELDS_PAGE_SIZE = 100;
+
+// Upper bound on pages so a server that keeps returning full pages cannot loop forever.
+export const MAX_FIELD_PAGES = 50;
+
+// Loads every attribute field, following the `after` cursor until a short page.
+async function loadAllFields(isCancelled: () => boolean): Promise<AccessPolicyField[]> {
+    const all: AccessPolicyField[] = [];
+    let after = '';
+    for (let page = 0; page < MAX_FIELD_PAGES; page++) {
+        // eslint-disable-next-line no-await-in-loop
+        const batch = (await client.getAccessPolicyFields(after, FIELDS_PAGE_SIZE)) || [];
+        if (isCancelled()) {
+            return all;
+        }
+        all.push(...batch);
+        if (batch.length < FIELDS_PAGE_SIZE) {
+            break;
+        }
+        after = batch[batch.length - 1].id;
+    }
+    return all;
+}
+
 // This component is registered as a System Console custom setting but it does NOT
 // use the setting's value/onChange/setSaveNeeded props: the rule is stored in
 // Mattermost's access control policy store (through the plugin server), never in
@@ -25,6 +49,7 @@ const AccessPolicySetting: React.FC = () => {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [policy, setPolicy] = useState<AccessPolicyState | null>(null);
     const [fields, setFields] = useState<AccessPolicyField[]>([]);
+    const [fieldsLoaded, setFieldsLoaded] = useState(false);
     const [fieldsError, setFieldsError] = useState<string | null>(null);
     const [expression, setExpression] = useState('');
     const [mode, setMode] = useState<EditorMode>('simple');
@@ -48,9 +73,10 @@ const AccessPolicySetting: React.FC = () => {
                 applyPolicy(state);
                 if (state.available) {
                     try {
-                        const loaded = await client.getAccessPolicyFields('', 100);
+                        const loaded = await loadAllFields(() => cancelled);
                         if (!cancelled) {
-                            setFields(loaded || []);
+                            setFields(loaded);
+                            setFieldsLoaded(true);
                         }
                     } catch (err) {
                         if (!cancelled) {
@@ -110,7 +136,8 @@ const AccessPolicySetting: React.FC = () => {
     const {Table, Cel} = getEditorComponents();
     const savedExpression = policy?.expression || '';
     const dirty = expression !== savedExpression;
-    const noUsableAttributes = fields.length > 0 ? !hasUsableAttributes(fields, false) : false;
+    const noUsableAttributes = fieldsLoaded && !fieldsError && !hasUsableAttributes(fields, false);
+    const ruleMayBlock = Boolean(policy?.has_policy || policy?.policy_unknown);
 
     const renderEditor = () => {
         const Editor = mode === 'simple' ? Table : Cel;
@@ -151,6 +178,38 @@ const AccessPolicySetting: React.FC = () => {
         );
     };
 
+    const feedback = (
+        <>
+            {error && (
+                <Banner
+                    kind='error'
+                    testId='pagerduty-access-error'
+                >
+                    {error}
+                </Banner>
+            )}
+            {notice && (
+                <Banner
+                    kind='success'
+                    testId='pagerduty-access-notice'
+                >
+                    {notice}
+                </Banner>
+            )}
+        </>
+    );
+
+    const removeButton = (
+        <button
+            type='button'
+            className='btn btn-danger'
+            onClick={handleRemove}
+            disabled={busy || !ruleMayBlock}
+        >
+            {'Remove rule'}
+        </button>
+    );
+
     if (loading) {
         return <div className='pagerduty-access-policy'>{'Loading access rule...'}</div>;
     }
@@ -187,6 +246,24 @@ const AccessPolicySetting: React.FC = () => {
                 </Banner>
             )}
 
+            {!policy.available && ruleMayBlock && (
+                <Banner
+                    kind='error'
+                    testId='pagerduty-access-blocking'
+                >
+                    <strong>{'A stored access rule may currently be blocking all users. '}</strong>
+                    {'A rule that cannot be evaluated denies access to everyone. Re-enable attribute-based access control or remove the rule to restore access.'}
+                </Banner>
+            )}
+
+            {!policy.available && feedback}
+
+            {!policy.available && ruleMayBlock && (
+                <div style={{display: 'flex', gap: 8, marginTop: 12}}>
+                    {removeButton}
+                </div>
+            )}
+
             {policy.available && (
                 <>
                     <p
@@ -206,7 +283,10 @@ const AccessPolicySetting: React.FC = () => {
                     )}
 
                     {noUsableAttributes && (
-                        <Banner kind='warning'>
+                        <Banner
+                            kind='warning'
+                            testId='pagerduty-access-no-attributes'
+                        >
                             {'No usable user attributes are available. Configure attributes (for example synced from LDAP or SAML, or admin-managed) before writing a rule.'}
                         </Banner>
                     )}
@@ -224,22 +304,7 @@ const AccessPolicySetting: React.FC = () => {
 
                     {renderEditor()}
 
-                    {error && (
-                        <Banner
-                            kind='error'
-                            testId='pagerduty-access-error'
-                        >
-                            {error}
-                        </Banner>
-                    )}
-                    {notice && (
-                        <Banner
-                            kind='success'
-                            testId='pagerduty-access-notice'
-                        >
-                            {notice}
-                        </Banner>
-                    )}
+                    {feedback}
 
                     <div style={{display: 'flex', gap: 8, marginTop: 12}}>
                         <button
@@ -250,14 +315,7 @@ const AccessPolicySetting: React.FC = () => {
                         >
                             {'Save rule'}
                         </button>
-                        <button
-                            type='button'
-                            className='btn btn-danger'
-                            onClick={handleRemove}
-                            disabled={busy || !policy.has_policy}
-                        >
-                            {'Remove rule'}
-                        </button>
+                        {removeButton}
                     </div>
                 </>
             )}
