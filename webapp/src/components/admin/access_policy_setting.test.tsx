@@ -2,8 +2,9 @@
 // See LICENSE.txt for license information.
 
 import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
 
-import AccessPolicySetting, {MAX_FIELD_PAGES} from './access_policy_setting';
+import AccessPolicySetting, {Banner, MAX_FIELD_PAGES} from './access_policy_setting';
 
 import client from '@/client/client';
 import {render, screen, waitFor, fireEvent} from '@/test-utils';
@@ -260,10 +261,85 @@ describe('AccessPolicySetting', () => {
         });
     });
 
-    it('enables Remove when the rule state is unknown while available', async () => {
-        mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({policy_unknown: true}));
+    describe('when ABAC is available but the rule state is unknown', () => {
+        it('shows the blocking warning and a neutral status, not "No access rule is set"', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({policy_unknown: true}));
+
+            render(<AccessPolicySetting/>);
+
+            expect(await screen.findByTestId('pagerduty-access-blocking')).toHaveTextContent(/may currently be blocking all users/);
+            expect(screen.getByText(/state of the access rule could not be determined/)).toBeInTheDocument();
+            expect(screen.queryByText(/No access rule is set/)).not.toBeInTheDocument();
+            expect(screen.queryByTestId('pagerduty-access-unavailable')).not.toBeInTheDocument();
+            expect(await screen.findByTestId('table-editor')).toBeInTheDocument();
+        });
+
+        it('keeps Remove enabled', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({policy_unknown: true}));
+            render(<AccessPolicySetting/>);
+            expect(await screen.findByRole('button', {name: 'Remove rule'})).toBeEnabled();
+        });
+
+        it('clears the warning and shows "No access rule is set" after removal', async () => {
+            mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({policy_unknown: true}));
+            mockClient.deleteAccessPolicy.mockResolvedValueOnce(policyState());
+
+            render(<AccessPolicySetting/>);
+            fireEvent.click(await screen.findByRole('button', {name: 'Remove rule'}));
+
+            expect(await screen.findByTestId('pagerduty-access-notice')).toBeInTheDocument();
+            expect(screen.queryByTestId('pagerduty-access-blocking')).not.toBeInTheDocument();
+            expect(screen.getByText('No access rule is set. Everyone can use the plugin.')).toBeInTheDocument();
+        });
+    });
+
+    it('does not show the blocking warning for an active rule while available', async () => {
+        mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({has_policy: true, expression: 'x'}));
         render(<AccessPolicySetting/>);
-        expect(await screen.findByRole('button', {name: 'Remove rule'})).toBeEnabled();
+        await screen.findByTestId('table-editor');
+        expect(screen.queryByTestId('pagerduty-access-blocking')).not.toBeInTheDocument();
+    });
+
+    it('honours the System Console disabled prop for Save, Remove and the editors', async () => {
+        const seen: boolean[] = [];
+        window.Components = {
+            AccessControlTableEditor: (props: any) => {
+                seen.push(props.disabled);
+                return <StubTable {...props}/>;
+            },
+            AccessControlCELEditor: StubCEL,
+        };
+        mockClient.getAccessPolicy.mockResolvedValueOnce(policyState({has_policy: true, expression: 'x'}));
+
+        render(<AccessPolicySetting disabled={true}/>);
+
+        const textarea = await screen.findByLabelText('table-expression');
+        await waitFor(() => expect(mockClient.getAccessPolicyFields).toHaveBeenCalled());
+        fireEvent.change(textarea, {target: {value: 'y'}});
+
+        expect(screen.getByRole('button', {name: 'Save rule'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: 'Remove rule'})).toBeDisabled();
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every(Boolean)).toBe(true);
+    });
+
+    // jsdom drops colour values that contain var(), so check the server-rendered markup.
+    describe('Banner styling', () => {
+        it.each([
+            ['error', 'dnd-indicator', 'icon-alert-outline'],
+            ['warning', 'away-indicator', 'icon-alert-outline'],
+            ['success', 'online-indicator', 'icon-check'],
+        ] as const)('uses Compass tokens for %s banners', (kind, token, icon) => {
+            const html = renderToStaticMarkup(<Banner kind={kind}>{'text'}</Banner>);
+
+            expect(html).toContain(`border:1px solid rgba(var(--${token}-rgb), 0.16)`);
+            expect(html).toContain(`background:rgba(var(--${token}-rgb), 0.08)`);
+            expect(html).toContain('color:var(--center-channel-color)');
+            expect(html).toContain('border-radius:var(--radius-s)');
+            expect(html).toContain(`class="icon ${icon}"`);
+            expect(html).toContain(`color:var(--${token})`);
+            expect(html).not.toMatch(/#[0-9a-f]{3,6}\b/i);
+        });
     });
 
     describe('usable attributes banner', () => {

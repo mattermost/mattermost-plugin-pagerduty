@@ -12,6 +12,7 @@ import {
 } from './access_control_editors';
 
 import client from '@/client/client';
+import type {AdminConsoleCustomSettingProps} from '@/types/mattermost-webapp';
 import type {AccessPolicyField, AccessPolicyState} from '@/types/pagerduty';
 
 type EditorMode = 'simple' | 'advanced';
@@ -40,11 +41,22 @@ async function loadAllFields(isCancelled: () => boolean): Promise<AccessPolicyFi
     return all;
 }
 
-// This component is registered as a System Console custom setting but it does NOT
-// use the setting's value/onChange/setSaveNeeded props: the rule is stored in
-// Mattermost's access control policy store (through the plugin server), never in
-// the plugin configuration, so it has its own Save and Remove buttons.
-const AccessPolicySetting: React.FC = () => {
+// Compass design-system tokens the Mattermost webapp defines as CSS variables at
+// runtime (webapp/channels/src/sass/base/_css_variables.scss, applied by applyTheme).
+// The System Console passes no theme to custom settings, so this component styles
+// itself with these variables instead of a theme object.
+const TEXT = 'var(--center-channel-color)';
+const TEXT_MUTED = 'rgba(var(--center-channel-color-rgb), 0.72)';
+const TEXT_SUBTLE = 'rgba(var(--center-channel-color-rgb), 0.56)';
+
+// The System Console passes the standard custom-setting props. Only `disabled` is
+// used. The value/onChange/setSaveNeeded props are deliberately ignored: the rule is
+// stored in Mattermost's access control policy store (through the plugin server),
+// never in the plugin configuration, so this setting has its own Save and Remove
+// buttons. Props are optional so the component also renders on its own.
+export type AccessPolicySettingProps = Partial<AdminConsoleCustomSettingProps>;
+
+const AccessPolicySetting: React.FC<AccessPolicySettingProps> = ({disabled = false}) => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [policy, setPolicy] = useState<AccessPolicyState | null>(null);
@@ -139,6 +151,11 @@ const AccessPolicySetting: React.FC = () => {
     const noUsableAttributes = fieldsLoaded && !fieldsError && !hasUsableAttributes(fields, false);
     const ruleMayBlock = Boolean(policy?.has_policy || policy?.policy_unknown);
 
+    // A stored rule may be denying everyone when it cannot be evaluated (ABAC
+    // unavailable) or when the server could not even read whether one is stored.
+    const showBlocking = Boolean(policy?.policy_unknown || (!policy?.available && policy?.has_policy));
+    const editorDisabled = disabled || busy || noUsableAttributes;
+
     const renderEditor = () => {
         const Editor = mode === 'simple' ? Table : Cel;
         if (!Editor) {
@@ -153,12 +170,21 @@ const AccessPolicySetting: React.FC = () => {
         }
 
         return (
-            <React.Suspense fallback={<p className='pagerduty-access-loading'>{'Loading editor...'}</p>}>
+            <React.Suspense
+                fallback={
+                    <p
+                        className='pagerduty-access-loading'
+                        style={{color: TEXT_SUBTLE}}
+                    >
+                        {'Loading editor...'}
+                    </p>
+                }
+            >
                 {mode === 'simple' && Table ? (
                     <Table
                         value={expression}
                         onChange={handleChange}
-                        disabled={busy || noUsableAttributes}
+                        disabled={editorDisabled}
                         userAttributes={fields}
                         enableUserManagedAttributes={false}
                         onParseError={() => setMode('advanced')}
@@ -169,7 +195,7 @@ const AccessPolicySetting: React.FC = () => {
                     <Cel
                         value={expression}
                         onChange={handleChange}
-                        disabled={busy || noUsableAttributes}
+                        disabled={editorDisabled}
                         userAttributes={toCELEditorAttributes(fields, false)}
                         actions={celEditorActions}
                     />
@@ -204,14 +230,21 @@ const AccessPolicySetting: React.FC = () => {
             type='button'
             className='btn btn-danger'
             onClick={handleRemove}
-            disabled={busy || !ruleMayBlock}
+            disabled={disabled || busy || !ruleMayBlock}
         >
             {'Remove rule'}
         </button>
     );
 
     if (loading) {
-        return <div className='pagerduty-access-policy'>{'Loading access rule...'}</div>;
+        return (
+            <div
+                className='pagerduty-access-policy'
+                style={{color: TEXT_SUBTLE}}
+            >
+                {'Loading access rule...'}
+            </div>
+        );
     }
 
     if (loadError || !policy) {
@@ -230,9 +263,9 @@ const AccessPolicySetting: React.FC = () => {
     return (
         <div
             className='pagerduty-access-policy'
-            style={{maxWidth: 900}}
+            style={{maxWidth: 900, color: TEXT}}
         >
-            <p style={{marginTop: 0}}>
+            <p style={{marginTop: 0, color: TEXT_MUTED}}>
                 {'With no rule, everyone can use the PagerDuty plugin. With a rule, only users who match it get the PagerDuty button, sidebar and commands. The rule also applies to system admins; they can always change it here.'}
             </p>
 
@@ -246,13 +279,13 @@ const AccessPolicySetting: React.FC = () => {
                 </Banner>
             )}
 
-            {!policy.available && ruleMayBlock && (
+            {showBlocking && (
                 <Banner
                     kind='error'
                     testId='pagerduty-access-blocking'
                 >
                     <strong>{'A stored access rule may currently be blocking all users. '}</strong>
-                    {'A rule that cannot be evaluated denies access to everyone. Re-enable attribute-based access control or remove the rule to restore access.'}
+                    {'A rule that cannot be evaluated denies access to everyone. Make sure attribute-based access control is enabled, or remove the rule, to restore access.'}
                 </Banner>
             )}
 
@@ -268,9 +301,9 @@ const AccessPolicySetting: React.FC = () => {
                 <>
                     <p
                         className='pagerduty-access-status'
-                        style={{fontWeight: 600}}
+                        style={{fontWeight: 600, color: TEXT}}
                     >
-                        {policy.has_policy ? 'An access rule is active.' : 'No access rule is set. Everyone can use the plugin.'}
+                        {statusText(policy)}
                     </p>
 
                     {fieldsError && (
@@ -311,7 +344,7 @@ const AccessPolicySetting: React.FC = () => {
                             type='button'
                             className='btn btn-primary'
                             onClick={handleSave}
-                            disabled={busy || !dirty || expression.trim() === ''}
+                            disabled={disabled || busy || !dirty || expression.trim() === ''}
                         >
                             {'Save rule'}
                         </button>
@@ -323,27 +356,55 @@ const AccessPolicySetting: React.FC = () => {
     );
 };
 
-const BANNER_COLORS: Record<string, string> = {
-    error: 'var(--error-text, #d24b4e)',
-    warning: 'var(--away-indicator, #ffbc1f)',
-    success: 'var(--online-indicator, #06d6a0)',
+function statusText(policy: AccessPolicyState): string {
+    if (policy.has_policy) {
+        return 'An access rule is active.';
+    }
+    if (policy.policy_unknown) {
+        return 'The state of the access rule could not be determined. A stored rule may exist.';
+    }
+    return 'No access rule is set. Everyone can use the plugin.';
+}
+
+type BannerKind = 'error' | 'warning' | 'success';
+
+// Mirrors the System Console SectionNotice (webapp/channels/src/components/section_notice,
+// used by the built-in access control policy pages): a tinted box whose border and
+// background use the semantic indicator colour at 16% and 8%, with a Compass icon.
+export const BANNER_TOKENS: Record<BannerKind, {rgb: string; color: string; icon: string}> = {
+    error: {rgb: '--dnd-indicator-rgb', color: '--dnd-indicator', icon: 'icon-alert-outline'},
+    warning: {rgb: '--away-indicator-rgb', color: '--away-indicator', icon: 'icon-alert-outline'},
+    success: {rgb: '--online-indicator-rgb', color: '--online-indicator', icon: 'icon-check'},
 };
 
-const Banner: React.FC<{kind: 'error' | 'warning' | 'success'; testId?: string; children: React.ReactNode}> = ({kind, testId, children}) => (
-    <div
-        role={kind === 'error' ? 'alert' : 'status'}
-        data-testid={testId}
-        style={{
-            margin: '8px 0',
-            padding: '10px 12px',
-            borderRadius: 4,
-            border: `1px solid ${BANNER_COLORS[kind]}`,
-            borderLeftWidth: 4,
-            fontSize: 13,
-        }}
-    >
-        {children}
-    </div>
-);
+export const Banner: React.FC<{kind: BannerKind; testId?: string; children: React.ReactNode}> = ({kind, testId, children}) => {
+    const tokens = BANNER_TOKENS[kind];
+    return (
+        <div
+            role={kind === 'error' ? 'alert' : 'status'}
+            data-testid={testId}
+            className={`pagerduty-access-banner pagerduty-access-banner--${kind}`}
+            style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                margin: '8px 0',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-s)',
+                border: `1px solid rgba(var(${tokens.rgb}), 0.16)`,
+                background: `rgba(var(${tokens.rgb}), 0.08)`,
+                color: TEXT,
+                fontSize: 13,
+            }}
+        >
+            <i
+                className={`icon ${tokens.icon}`}
+                aria-hidden='true'
+                style={{color: `var(${tokens.color})`, fontSize: 16, lineHeight: '20px'}}
+            />
+            <div style={{lineHeight: '20px'}}>{children}</div>
+        </div>
+    );
+};
 
 export default AccessPolicySetting;

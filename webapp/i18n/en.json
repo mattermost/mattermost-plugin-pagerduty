@@ -69,6 +69,7 @@
     "pagerduty.admin.accessPolicy.unavailableDefault": "Attribute-based access control is not licensed or enabled on this server.",
     "pagerduty.admin.accessPolicy.active": "An access rule is active.",
     "pagerduty.admin.accessPolicy.none": "No access rule is set. Everyone can use the plugin.",
+    "pagerduty.admin.accessPolicy.unknown": "The state of the access rule could not be determined. A stored rule may exist.",
     "pagerduty.admin.accessPolicy.fieldsError": "Could not load user attributes: {error}",
     "pagerduty.admin.accessPolicy.noAttributes": "No usable user attributes are available. Configure attributes (for example synced from LDAP or SAML, or admin-managed) before writing a rule.",
     "pagerduty.admin.accessPolicy.switchToAdvanced": "Switch to advanced mode",
@@ -80,7 +81,7 @@
     "pagerduty.admin.accessPolicy.saved": "Access rule saved.",
     "pagerduty.admin.accessPolicy.removed": "Access rule removed. Everyone can use the plugin.",
     "pagerduty.admin.accessPolicy.blockingTitle": "A stored access rule may currently be blocking all users.",
-    "pagerduty.admin.accessPolicy.blockingMessage": "A rule that cannot be evaluated denies access to everyone. Re-enable attribute-based access control or remove the rule to restore access.",
+    "pagerduty.admin.accessPolicy.blockingMessage": "A rule that cannot be evaluated denies access to everyone. Make sure attribute-based access control is enabled, or remove the rule, to restore access.",
     "pagerduty.sidebar.noAccess.title": "You don't have access to the PagerDuty plugin",
     "pagerduty.sidebar.noAccess.message": "A system administrator has restricted this plugin to specific users. Contact your administrator if you think this is a mistake."
 }

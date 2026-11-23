@@ -539,7 +539,8 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
         );
     }
 
-    // Access denied by the plugin's access rule — nothing else is usable
+    // Access denied by the plugin's access rule — nothing else is usable.
+    // Styled with Compass CSS variables rather than the theme prop (see CLAUDE.md).
     if (accessDenied) {
         return (
             <div
@@ -549,10 +550,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                 <div
                     style={{
                         padding: '12px 16px',
-                        borderBottom: `1px solid ${theme.centerChannelColor}20`,
+                        borderBottom: '1px solid rgba(var(--center-channel-color-rgb), 0.12)',
                     }}
                 >
-                    <h3 style={{margin: 0, color: theme.centerChannelColor, fontSize: '16px'}}>
+                    <h3 style={{margin: 0, color: 'var(--center-channel-color)', fontSize: '16px'}}>
                         {'PagerDuty'}
                     </h3>
                 </div>
@@ -568,10 +569,10 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                         textAlign: 'center',
                     }}
                 >
-                    <h4 style={{color: theme.centerChannelColor, margin: '0 0 8px 0', fontSize: '16px'}}>
+                    <h4 style={{color: 'var(--center-channel-color)', margin: '0 0 8px 0', fontSize: '16px'}}>
                         {'You don\'t have access to the PagerDuty plugin'}
                     </h4>
-                    <p style={{color: theme.centerChannelColor, opacity: 0.6, fontSize: '13px', margin: 0, lineHeight: 1.5}}>
+                    <p style={{color: 'rgba(var(--center-channel-color-rgb), 0.72)', fontSize: '13px', margin: 0, lineHeight: 1.5}}>
                         {'A system administrator has restricted this plugin to specific users. Contact your administrator if you think this is a mistake.'}
                     </p>
                 </div>

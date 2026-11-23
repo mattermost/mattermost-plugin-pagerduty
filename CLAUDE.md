@@ -44,6 +44,9 @@ mattermost-pagerduty-plugin/
 │   │   ├── client/
 │   │   │   ├── client.ts          # Frontend HTTP client wrapper
 │   │   │   └── client.test.ts
+│   │   ├── components/admin/
+│   │   │   ├── access_policy_setting.tsx  # System Console custom setting: edit/remove the access rule
+│   │   │   └── access_control_editors.ts  # Wraps Mattermost's window.Components ABAC editors and their actions
 │   │   ├── components/sidebar/
 │   │   │   ├── sidebar.tsx        # Root sidebar container, navigation state
 │   │   │   ├── sidebar.test.tsx
@@ -175,9 +178,15 @@ An optional rule (stored as a plugin-owned policy in the server, not in plugin c
 ## Frontend Architecture (React/TypeScript)
 
 ### Plugin Registration (`webapp/src/index.tsx`)
-Registers two things with Mattermost:
+Always registers the `AccessPolicy` System Console custom setting (`registerAdminConsoleCustomSetting`), plus a websocket handler for `access_policy_changed` and a reconnect handler.
+
+Then asks `GET /access`; only when it returns `allowed: true` does it register:
 1. `registerRightHandSidebarComponent(PagerDutySidebar, 'PagerDuty')` — the main sidebar
 2. `registerChannelHeaderButtonAction(Icon, handler, tooltip)` — green "P" button that toggles the sidebar
+3. `registerRootComponent(CreateIncidentPostModal)` — incident creation modal
+4. `registerPostDropdownMenuComponent(CreateIncidentMenuItem)` — "create incident" post menu item
+
+A later denial unregisters them. A failed check keeps the current state and retries with backoff (2s/5s/15s/30s); the policy-changed event re-checks after a 0-3s jitter, and the newest check wins. `uninitialize()` cancels pending timers and discards in-flight checks so nothing registers after unload.
 
 ### Component Hierarchy
 ```
@@ -197,7 +206,10 @@ Wraps `window.fetch` with the plugin base path. All calls are async, authenticat
 Mirror the Go types in `server/pagerduty/types.go`. Keep both in sync when adding new API fields.
 
 ### Styling
-Inline styles using Mattermost theme colors (passed as props). No CSS files — all styles are in-component. CSS class names are added to elements for future external customization.
+Inline styles only (no CSS files); CSS class names are added to elements for future external customization.
+- Sidebar components take the `theme` prop (Mattermost theme object) and style from it.
+- System Console components (`components/admin/`) receive no theme; they use the Compass CSS variables (e.g. `var(--center-channel-color)`, `rgba(var(--center-channel-color-rgb), 0.72)`, `--dnd-indicator`/`--away-indicator`/`--online-indicator`) and standard classes (`btn btn-primary`, `btn-tertiary`, `btn-danger`, `icon icon-*`). The sidebar's no-access state uses them too.
+- New components should prefer Compass tokens over the theme object.
 
 ### i18n
 Strings live in `webapp/i18n/en.json`. The i18n setup is scaffolded but not fully wired; new user-visible strings should be added here.
@@ -238,7 +250,7 @@ cd webapp && npm run test-ci  # single run with coverage
 - Schedule timeline window is **48 hours** from now (not 7 days)
 
 ### TypeScript / React
-- Props include `theme` (Mattermost theme object) for consistent styling
+- Sidebar components take the `theme` prop; System Console components get no theme and use Compass CSS variables and classes; new components should prefer Compass tokens
 - Components use functional React with hooks
 - No global state management — sidebar navigation is local state in `sidebar.tsx`
 - All API calls go through `webapp/src/client/client.ts`; never call `fetch` directly in components

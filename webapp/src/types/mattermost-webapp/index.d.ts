@@ -4,13 +4,26 @@
 import type React from 'react';
 import type {Action} from 'redux';
 
-// Props of the System Console custom setting component (only what we read).
+import type {AdminConfig, ClientLicense} from '@mattermost/types/config';
+
+// Props the System Console passes to a registerAdminConsoleCustomSetting component
+// (mattermost v11.11.0, SystemConsoleCustomSettingsComponentProps in
+// webapp/channels/src/components/admin_console/schema_admin_settings.tsx).
 export interface AdminConsoleCustomSettingProps {
     id: string;
-    label?: string;
-    helpText?: React.ReactNode;
-    disabled?: boolean;
-    value?: unknown;
+    label: React.ReactNode;
+    helpText: React.ReactNode;
+    value: unknown;
+    disabled: boolean;
+    config: Partial<AdminConfig>;
+    license: ClientLicense;
+    setByEnv: boolean;
+    onChange: (id: string, value: unknown, confirm?: boolean, doSubmit?: boolean, warning?: boolean) => void;
+    registerSaveAction: (saveAction: () => Promise<{error?: {message?: string}}>) => void;
+    setSaveNeeded: () => void;
+    unRegisterSaveAction: (saveAction: () => Promise<{error?: {message?: string}}>) => void;
+    cancelSubmit: () => void;
+    showConfirm: boolean;
 }
 
 // Result shape of the thunks the core editors expect from their action callbacks

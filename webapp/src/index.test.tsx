@@ -14,7 +14,7 @@ jest.mock('@/components/admin/access_policy_setting', () => ({__esModule: true, 
 
 const EVENT = 'custom_com.mattermost.plugin-pagerduty_access_policy_changed';
 
-let PluginClass: new () => {initialize: (r: PluginRegistry, s: any) => Promise<void>};
+let PluginClass: new () => {initialize: (r: PluginRegistry, s: any) => Promise<void>; uninitialize: () => void};
 
 beforeAll(async () => {
     (window as any).registerPlugin = jest.fn();
@@ -356,5 +356,102 @@ describe('Plugin access check resilience', () => {
         await tick(3000);
 
         expect(mockClient.getAccess).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('Plugin unload', () => {
+    it('registers nothing when an in-flight check resolves allowed after unload', async () => {
+        let resolveCheck: (v: {allowed: boolean}) => void = () => {};
+        mockClient.getAccess.mockReturnValueOnce(new Promise((resolve) => {
+            resolveCheck = resolve;
+        }));
+        const {registry, store} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+
+        plugin.uninitialize();
+        resolveCheck({allowed: true});
+        await flush();
+
+        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+        expect(store.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('does not schedule a retry when an in-flight check fails after unload', async () => {
+        let rejectCheck: (e: Error) => void = () => {};
+        mockClient.getAccess.mockReturnValueOnce(new Promise((_, reject) => {
+            rejectCheck = reject;
+        }));
+        const {registry, store} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+
+        plugin.uninitialize();
+        rejectCheck(new Error('network'));
+        await flush();
+        await tick(10 * 60 * 1000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels a pending backoff retry', async () => {
+        mockClient.getAccess.mockRejectedValueOnce(new Error('network'));
+        mockClient.getAccess.mockResolvedValue({allowed: true});
+        const {registry, store} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+        await flush();
+
+        plugin.uninitialize();
+        await tick(10 * 60 * 1000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    });
+
+    it('cancels a pending jittered re-check', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: false});
+        const {registry, store, handlers} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+        await flush();
+
+        (Math.random as jest.Mock).mockReturnValue(0.5);
+        mockClient.getAccess.mockResolvedValue({allowed: true});
+        handlers[EVENT]();
+        plugin.uninitialize();
+        await tick(3000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    });
+
+    it('ignores websocket events and reconnects delivered after unload', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: false});
+        const {registry, store, handlers, fireReconnect} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+        await flush();
+
+        plugin.uninitialize();
+        mockClient.getAccess.mockResolvedValue({allowed: true});
+        handlers[EVENT]();
+        fireReconnect();
+        await tick(60000);
+
+        expect(mockClient.getAccess).toHaveBeenCalledTimes(1);
+        registerCalls(registry).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    });
+
+    it('does not unregister components itself on unload', async () => {
+        mockClient.getAccess.mockResolvedValueOnce({allowed: true});
+        const {registry, store} = setup();
+        const plugin = new PluginClass();
+        await plugin.initialize(registry as any, store);
+        await flush();
+
+        plugin.uninitialize();
+
+        expect(registry.unregisterComponent).not.toHaveBeenCalled();
     });
 });

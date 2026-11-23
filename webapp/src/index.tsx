@@ -76,6 +76,10 @@ export default class Plugin {
 
         // Converge on server-side policy changes and after reconnects.
         registry.registerWebSocketEventHandler(ACCESS_POLICY_CHANGED_EVENT, () => {
+            if (!this.registry) {
+                return;
+            }
+
             // Spread the re-checks of all connected clients over a few seconds.
             this.cancelPending();
             this.jitterTimer = setTimeout(() => {
@@ -84,12 +88,30 @@ export default class Plugin {
             }, Math.random() * ACCESS_RECHECK_JITTER_MS);
         });
         registry.registerReconnectHandler(() => {
+            if (!this.registry) {
+                return;
+            }
             this.cancelPending();
             this.refreshAccess();
         });
 
         // Do not block plugin initialization on the network.
         this.refreshAccess();
+    }
+
+    // Called by Mattermost when the plugin is disabled or the webapp unloads it.
+    // Mattermost removes the components this plugin registered itself, so nothing is
+    // unregistered here; this only makes sure no pending timer or in-flight access
+    // check registers UI afterwards.
+    public uninitialize() {
+        this.cancelPending();
+
+        // Any response still in flight now has a stale sequence number and is discarded,
+        // and a stale failure cannot schedule a retry.
+        this.checkSeq++;
+        this.registry = null;
+        this.store = null;
+        this.registered = null;
     }
 
     private cancelPending() {
@@ -108,6 +130,10 @@ export default class Plugin {
     // error the current state is kept and the check is retried with capped backoff,
     // after which the next reconnect or websocket event retries.
     private async refreshAccess(attempt = 0) {
+        if (!this.registry) {
+            // Unloaded: never start a check or schedule a retry.
+            return;
+        }
         this.cancelPending();
         const seq = ++this.checkSeq;
         let allowed: boolean;

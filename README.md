@@ -117,7 +117,7 @@ By default everyone on the server can use the plugin. A system admin can instead
 Notes:
 
 - With no rule saved, all users have access. If the rule cannot be evaluated (for example, ABAC is turned off after a rule was saved), access is denied. If ABAC is unavailable you can still remove the rule from the setting only when the server's access control engine is registered; otherwise removal fails and the stored rule stays in place until ABAC is available again.
-- Access decisions are cached for up to 30 seconds per user (cleared immediately when the rule is saved or removed).
+- Access decisions are cached for up to 30 seconds per user. When the rule is saved or removed, the server node that handles the change clears its cache at once and other cluster nodes clear theirs when they receive the cluster event; if that event is not delivered, stale decisions expire within 30 seconds.
 - The `/pagerduty` slash command remains visible in autocomplete for everyone, because Mattermost cannot hide it per user. Users without access get a refusal message when they run it.
 - On-call DM notifications and webhook channel posts are not affected by the rule.
 
