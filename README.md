@@ -38,7 +38,8 @@ The Mattermost PagerDuty Plugin integrates PagerDuty with Mattermost, allowing t
 
 ## Requirements
 
-- Mattermost Server v10.7.0 or higher
+- Mattermost Server v11.11.0 or higher
+- To restrict who can use the plugin (optional): a Mattermost Enterprise Advanced or Entry license, with attribute-based access control enabled (see [Step 5](#step-5-restrict-access-with-an-access-policy-admin-only-optional))
 - PagerDuty account with API and OAuth App access
 
 ## Installation
@@ -104,6 +105,20 @@ To receive real-time incident notifications from PagerDuty:
 4. Check status anytime with `/pagerduty webhook status`
 
 > **Note:** Your Mattermost server must be accessible from the internet for PagerDuty to deliver webhooks. The webhook URL will be `https://<YOUR_MATTERMOST_URL>/plugins/com.mattermost.plugin-pagerduty/api/v1/webhook`.
+
+### Step 5: Restrict Access with an Access Policy (Admin Only, Optional)
+
+By default everyone on the server can use the plugin. A system admin can instead limit it to users matching an attribute-based access control (ABAC) rule, for example `user.attributes.team == "sre"`.
+
+1. Requires a Mattermost Enterprise Advanced or Entry license and **Enable Attribute-Based Access Control** turned on (the `AccessControlSettings.EnableAttributeBasedAccessControl` server setting). Without these, the setting shows why it is unavailable.
+2. Go to **System Console > Plugins > PagerDuty Plugin** and edit the **Access Policy** setting. Save the rule, or remove it to allow everyone again.
+3. Users who do not match the rule do not see the plugin UI, receive `403` from the plugin's REST API, and are refused by `/pagerduty`. The rule applies to system admins too, but admins can always open the setting to change it.
+
+Notes:
+
+- With no rule saved, all users have access. If the rule cannot be evaluated (for example, ABAC is turned off after a rule was saved), access is denied.
+- The `/pagerduty` slash command remains visible in autocomplete for everyone, because Mattermost cannot hide it per user. Users without access get a refusal message when they run it.
+- On-call DM notifications and webhook channel posts are not affected by the rule.
 
 ### Notifications & Subscriptions
 
@@ -179,7 +194,7 @@ You can also manage notification preferences from the sidebar by clicking the **
 
 ### Prerequisites
 
-- Go 1.23 or higher
+- Go 1.26.7 or higher
 - Node.js 16 or higher
 - npm 8 or higher
 

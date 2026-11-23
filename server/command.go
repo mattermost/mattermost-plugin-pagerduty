@@ -51,6 +51,10 @@ func (p *Plugin) registerCommand() error {
 func (p *Plugin) ExecuteCommand(_ *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
 	p.client.Log.Debug("Slash command received", "command", args.Command, "user_id", args.UserId)
 
+	if !p.userHasAccess(args.UserId) {
+		return ephemeral("You do not have access to the PagerDuty plugin."), nil
+	}
+
 	resp, err := p.handleCommand(args)
 	if err != nil {
 		p.client.Log.Error("Slash command failed", "error", err)

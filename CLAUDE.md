@@ -8,9 +8,9 @@ This is a Mattermost plugin that integrates PagerDuty into the Mattermost sideba
 - Page (create incidents) directly from Mattermost with service selection
 - Channel header button to open the right-hand sidebar
 
-**Plugin ID:** `com.svelle.pagerduty-plugin`
-**Min Mattermost Version:** 6.2.1
-**Go version:** 1.22.0
+**Plugin ID:** `com.mattermost.plugin-pagerduty`
+**Min Mattermost Version:** 11.11.0 (plugin ABAC API)
+**Go version:** 1.26.7
 
 ---
 
@@ -23,6 +23,9 @@ mattermost-pagerduty-plugin/
 │   ├── plugin.go                  # Plugin struct, OnActivate, OnDeactivate
 │   ├── api.go                     # HTTP router (gorilla/mux), auth middleware, error helpers
 │   ├── api_pagerduty.go           # HTTP handler functions for all API endpoints
+│   ├── access_control.go          # ABAC: resource type/ID, userHasAccess, AccessControlRequired middleware
+│   ├── api_access_control.go      # /access and /admin/access-policy/* handlers, SystemAdminRequired
+│   ├── access_control_test.go     # Tests for the above
 │   ├── configuration.go           # Plugin config struct, getConfiguration/setConfiguration
 │   ├── api_test.go                # Tests for API handlers
 │   ├── plugin_test.go             # Tests for plugin lifecycle
@@ -134,6 +137,26 @@ All routes are under `/api/v1`, protected by `MattermostAuthorizationRequired` m
 | GET | `/api/v1/schedule` | `handleGetScheduleDetails` | 48-hour timeline; requires `?id=` |
 | GET | `/api/v1/services` | `handleGetServices` | List services (limit 100) |
 | POST | `/api/v1/incidents` | `handleCreateIncident` | Create incident; body: `{title, service_id, description?, assignee_ids?}` |
+
+### Access control (ABAC)
+An optional rule (stored as a plugin-owned policy in the server, not in plugin config) decides which users may use the plugin. Resource type `<manifest.Id>:plugin`, action `view`, one policy whose ID is a stable `model.NewId()` kept in KV (`pagerduty_access_resource_id`, created with an atomic set).
+- `userHasAccess(userID)` wraps `p.API.EvaluateAccessControl` (no pluginapi wrapper exists): no policy -> allow; any error or nil decision -> deny (warn log).
+- `AccessControlRequired` middleware gates every route on `authRouter` -> 403 `api.pagerduty.access.forbidden`. `/api/v1/webhook` (HMAC), `/access` and `/admin/access-policy/*` are not gated. `ExecuteCommand` checks `userHasAccess` too. On-call DMs and webhook posts are not gated.
+- The upstream API does not check permissions; admin routes use `SystemAdminRequired` (`isUserSystemAdmin`) -> 403 `api.pagerduty.access_policy.forbidden`.
+- Saving or deleting the policy publishes the `access_policy_changed` websocket event to all users.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/access` | `{"allowed": bool}` for the caller |
+| GET | `/api/v1/admin/access-policy` | `{available, unavailable_reason, has_policy, expression}` (admin) |
+| PUT | `/api/v1/admin/access-policy` | Save rule; body `{expression}`; same response as GET |
+| DELETE | `/api/v1/admin/access-policy` | Remove rule; same response as GET |
+| POST | `/api/v1/admin/access-policy/check` | `{errors: [{line, column, message}]}` |
+| POST | `/api/v1/admin/access-policy/visual-ast` | `model.VisualExpression` |
+| GET | `/api/v1/admin/access-policy/fields?after=&limit=` | `[]model.PropertyField` |
+| POST | `/api/v1/admin/access-policy/test-users` | body `{expression, term, after, limit}` -> `model.AccessControlPolicyTestResponse` |
+
+`server/manifest.go` (`manifest.Id`) is generated and gitignored: run `make apply` (or `go run ./build/manifest apply` from the repo root) before building or testing.
 
 **Error response format:**
 ```json
@@ -260,7 +283,7 @@ dist/
 
 ## Dependency Notes
 
-- **github.com/mattermost/mattermost/server/public v0.1.10** — Mattermost plugin API
+- **github.com/mattermost/mattermost/server/public v0.4.4** — Mattermost plugin API
 - **github.com/gorilla/mux v1.8.1** — HTTP routing
 - **github.com/pkg/errors v0.9.1** — error wrapping
 - **@mattermost/client / @mattermost/types 10.8.0** — Mattermost frontend types
