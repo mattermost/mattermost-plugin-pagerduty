@@ -393,4 +393,80 @@ describe('Client', () => {
             await expect(client.disconnect()).rejects.toThrow('Failed to disconnect');
         });
     });
+    describe('access control', () => {
+        const base = 'http://localhost:8065/plugins/com.mattermost.plugin-pagerduty/api/v1';
+        const policy = {available: true, unavailable_reason: '', has_policy: true, expression: 'user.attributes.team == "sre"'};
+        const ok = (body: unknown) => (global.fetch as jest.Mock).mockResolvedValueOnce({ok: true, json: async () => body});
+        const lastCall = () => (global.fetch as jest.Mock).mock.calls[0];
+
+        it('getAccess fetches /access', async () => {
+            ok({allowed: true});
+            await expect(client.getAccess()).resolves.toEqual({allowed: true});
+            expect(lastCall()[0]).toBe(`${base}/access`);
+        });
+
+        it('getAccess surfaces a 403 as ClientError with status', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                json: async () => ({id: 'api.pagerduty.access.forbidden', message: 'nope'}),
+            });
+            await expect(client.getAccess()).rejects.toMatchObject({name: 'ClientError', status: 403, message: 'nope'});
+        });
+
+        it('getAccessPolicy fetches the admin route', async () => {
+            ok(policy);
+            await expect(client.getAccessPolicy()).resolves.toEqual(policy);
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy`);
+        });
+
+        it('saveAccessPolicy PUTs the expression', async () => {
+            ok(policy);
+            await client.saveAccessPolicy(policy.expression);
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy`);
+            expect(lastCall()[1]).toMatchObject({method: 'PUT', body: JSON.stringify({expression: policy.expression})});
+        });
+
+        it('saveAccessPolicy surfaces a 400 message', async () => {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                status: 400,
+                json: async () => ({message: 'invalid expression'}),
+            });
+            await expect(client.saveAccessPolicy('((')).rejects.toMatchObject({status: 400, message: 'invalid expression'});
+        });
+
+        it('deleteAccessPolicy sends DELETE', async () => {
+            ok({...policy, has_policy: false, expression: ''});
+            await client.deleteAccessPolicy();
+            expect(lastCall()[1]).toMatchObject({method: 'DELETE'});
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy`);
+        });
+
+        it('checkAccessPolicyExpression POSTs to /check', async () => {
+            ok({errors: []});
+            await client.checkAccessPolicyExpression('x');
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy/check`);
+            expect(lastCall()[1]).toMatchObject({method: 'POST', body: JSON.stringify({expression: 'x'})});
+        });
+
+        it('getAccessPolicyVisualAST POSTs to /visual-ast', async () => {
+            ok({conditions: []});
+            await expect(client.getAccessPolicyVisualAST('x')).resolves.toEqual({conditions: []});
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy/visual-ast`);
+        });
+
+        it('getAccessPolicyFields passes after and limit', async () => {
+            ok([]);
+            await client.getAccessPolicyFields('abc', 50);
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy/fields?after=abc&limit=50`);
+        });
+
+        it('searchAccessPolicyTestUsers POSTs the search body', async () => {
+            ok({users: [], total: 0});
+            await client.searchAccessPolicyTestUsers('x', 'ann', '', 10);
+            expect(lastCall()[0]).toBe(`${base}/admin/access-policy/test-users`);
+            expect(JSON.parse(lastCall()[1].body)).toEqual({expression: 'x', term: 'ann', after: '', limit: 10});
+        });
+    });
 });
