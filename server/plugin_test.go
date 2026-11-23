@@ -41,6 +41,9 @@ type mockKVStore struct {
 	deleteWebhookRegistrationFunc func() error
 	getOnCallSnapshotFunc         func() (*kvstore.OnCallSnapshot, error)
 	setOnCallSnapshotFunc         func(snapshot *kvstore.OnCallSnapshot) error
+	accessResourceID              string
+	getAccessResourceIDFunc       func() (string, error)
+	createAccessResourceIDFunc    func(id string) (bool, error)
 }
 
 func (m *mockKVStore) GetCachedSchedules() ([]byte, error) { return nil, nil }
@@ -137,6 +140,25 @@ func (m *mockKVStore) SetOnCallSnapshot(snapshot *kvstore.OnCallSnapshot) error 
 // Reminder tracking
 func (m *mockKVStore) GetReminderRecord() (*kvstore.ReminderRecord, error) { return nil, nil }
 func (m *mockKVStore) SetReminderRecord(_ *kvstore.ReminderRecord) error   { return nil }
+
+// Access control resource ID
+func (m *mockKVStore) GetAccessResourceID() (string, error) {
+	if m.getAccessResourceIDFunc != nil {
+		return m.getAccessResourceIDFunc()
+	}
+	return m.accessResourceID, nil
+}
+
+func (m *mockKVStore) CreateAccessResourceID(id string) (bool, error) {
+	if m.createAccessResourceIDFunc != nil {
+		return m.createAccessResourceIDFunc(id)
+	}
+	if m.accessResourceID != "" {
+		return false, nil
+	}
+	m.accessResourceID = id
+	return true, nil
+}
 
 func (m *mockKVStore) GetUserToken(userID string) (*kvstore.OAuthToken, error) {
 	if m.getUserTokenFunc != nil {
@@ -324,6 +346,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+			allowAllAccess(api)
 
 			p := &Plugin{}
 			p.SetAPI(api)

@@ -84,6 +84,14 @@ type Plugin struct {
 	// tokenURLOverride, when set, replaces the PagerDuty OAuth token endpoint. Used in tests.
 	tokenURLOverride string
 
+	// accessResourceID caches the stable ABAC resource/policy ID read from the KV store.
+	accessResourceID     string
+	accessResourceIDLock sync.Mutex
+
+	// accessCache holds short-lived per-user ABAC decisions. accessClock overrides time.Now in tests.
+	accessCache accessDecisionCache
+	accessClock func() time.Time
+
 	// refreshLockTimeoutOverride, when set, replaces tokenRefreshLockTimeout. Used in tests.
 	refreshLockTimeoutOverride time.Duration
 }

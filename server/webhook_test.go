@@ -22,6 +22,7 @@ import (
 )
 
 func newTestPlugin(api *plugintest.API) *Plugin {
+	allowAllAccess(api)
 	p := &Plugin{}
 	p.SetAPI(api)
 	p.client = pluginapi.NewClient(api, nil)

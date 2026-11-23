@@ -8,9 +8,9 @@ This is a Mattermost plugin that integrates PagerDuty into the Mattermost sideba
 - Page (create incidents) directly from Mattermost with service selection
 - Channel header button to open the right-hand sidebar
 
-**Plugin ID:** `com.svelle.pagerduty-plugin`
-**Min Mattermost Version:** 6.2.1
-**Go version:** 1.22.0
+**Plugin ID:** `com.mattermost.plugin-pagerduty`
+**Min Mattermost Version:** 11.11.0 (plugin ABAC API)
+**Go version:** 1.26.7
 
 ---
 
@@ -23,6 +23,9 @@ mattermost-pagerduty-plugin/
 │   ├── plugin.go                  # Plugin struct, OnActivate, OnDeactivate
 │   ├── api.go                     # HTTP router (gorilla/mux), auth middleware, error helpers
 │   ├── api_pagerduty.go           # HTTP handler functions for all API endpoints
+│   ├── access_control.go          # ABAC: resource type/ID, userHasAccess, AccessControlRequired middleware
+│   ├── api_access_control.go      # /access and /admin/access-policy/* handlers, SystemAdminRequired
+│   ├── access_control_test.go     # Tests for the above
 │   ├── configuration.go           # Plugin config struct, getConfiguration/setConfiguration
 │   ├── api_test.go                # Tests for API handlers
 │   ├── plugin_test.go             # Tests for plugin lifecycle
@@ -41,6 +44,9 @@ mattermost-pagerduty-plugin/
 │   │   ├── client/
 │   │   │   ├── client.ts          # Frontend HTTP client wrapper
 │   │   │   └── client.test.ts
+│   │   ├── components/admin/
+│   │   │   ├── access_policy_setting.tsx  # System Console custom setting: edit/remove the access rule
+│   │   │   └── access_control_editors.ts  # Wraps Mattermost's window.Components ABAC editors and their actions
 │   │   ├── components/sidebar/
 │   │   │   ├── sidebar.tsx        # Root sidebar container, navigation state
 │   │   │   ├── sidebar.test.tsx
@@ -135,6 +141,26 @@ All routes are under `/api/v1`, protected by `MattermostAuthorizationRequired` m
 | GET | `/api/v1/services` | `handleGetServices` | List services (limit 100) |
 | POST | `/api/v1/incidents` | `handleCreateIncident` | Create incident; body: `{title, service_id, description?, assignee_ids?}` |
 
+### Access control (ABAC)
+An optional rule (stored as a plugin-owned policy in the server, not in plugin config) decides which users may use the plugin. Resource type `<manifest.Id>:plugin`, action `view`, one policy whose ID is a stable `model.NewId()` kept in KV (`pagerduty_access_resource_id`, created with an atomic set).
+- `userHasAccess(userID)` wraps `p.API.EvaluateAccessControl` (no pluginapi wrapper exists): no policy -> allow; any error or nil decision -> deny (warn log). Real decisions (allow, deny, no-policy) are cached per user for 30s (`accessDecisionCache`, bounded, injectable `p.accessClock`); errors, nil decisions and resource-ID failures are never cached. Saving/deleting the policy clears the cache locally and on other nodes via `PublishPluginClusterEvent` (`access_cache_invalidate`) handled in `OnPluginClusterEvent`.
+- `AccessControlRequired` middleware gates every route on `authRouter` -> 403 `api.pagerduty.access.forbidden`. `/api/v1/webhook` (HMAC), `/access` and `/admin/access-policy/*` are not gated. `ExecuteCommand` checks `userHasAccess` too. On-call DMs and webhook posts are not gated.
+- The upstream API does not check permissions; admin routes use `SystemAdminRequired` (`isUserSystemAdmin`) -> 403 `api.pagerduty.access_policy.forbidden`.
+- Saving or deleting the policy publishes the `access_policy_changed` websocket event to all users.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/access` | `{"allowed": bool}` for the caller |
+| GET | `/api/v1/admin/access-policy` | `{available, unavailable_reason, has_policy, policy_unknown, expression}` (admin); `policy_unknown` is true when the read returned 501 (engine not registered), so a stored rule may exist |
+| PUT | `/api/v1/admin/access-policy` | Save rule; body `{expression}`; same response as GET, built from the saved policy (no re-read) |
+| DELETE | `/api/v1/admin/access-policy` | Remove rule; same response as GET (`has_policy` false). Only a 404 upstream counts as already absent; a 501 is returned as an error (rule still stored) |
+| POST | `/api/v1/admin/access-policy/check` | `{errors: [{line, column, message}]}` |
+| POST | `/api/v1/admin/access-policy/visual-ast` | `model.VisualExpression` |
+| GET | `/api/v1/admin/access-policy/fields?after=&limit=` | `[]model.PropertyField` |
+| POST | `/api/v1/admin/access-policy/test-users` | body `{expression, term, after, limit}` -> `model.AccessControlPolicyTestResponse` |
+
+`server/manifest.go` (`manifest.Id`) is generated and gitignored: run `make apply` (or `go run ./build/manifest apply` from the repo root) before building or testing.
+
 **Error response format:**
 ```json
 {"id": "api.pagerduty.schedules.error", "message": "Failed to retrieve schedules"}
@@ -152,9 +178,15 @@ All routes are under `/api/v1`, protected by `MattermostAuthorizationRequired` m
 ## Frontend Architecture (React/TypeScript)
 
 ### Plugin Registration (`webapp/src/index.tsx`)
-Registers two things with Mattermost:
+Always registers the `AccessPolicy` System Console custom setting (`registerAdminConsoleCustomSetting`), plus a websocket handler for `access_policy_changed` and a reconnect handler.
+
+Then asks `GET /access`; only when it returns `allowed: true` does it register:
 1. `registerRightHandSidebarComponent(PagerDutySidebar, 'PagerDuty')` — the main sidebar
 2. `registerChannelHeaderButtonAction(Icon, handler, tooltip)` — green "P" button that toggles the sidebar
+3. `registerRootComponent(CreateIncidentPostModal)` — incident creation modal
+4. `registerPostDropdownMenuComponent(CreateIncidentMenuItem)` — "create incident" post menu item
+
+A later denial unregisters them. A failed check keeps the current state and retries with backoff (2s/5s/15s/30s); the policy-changed event re-checks after a 0-3s jitter, and the newest check wins. `uninitialize()` cancels pending timers and discards in-flight checks so nothing registers after unload.
 
 ### Component Hierarchy
 ```
@@ -174,7 +206,10 @@ Wraps `window.fetch` with the plugin base path. All calls are async, authenticat
 Mirror the Go types in `server/pagerduty/types.go`. Keep both in sync when adding new API fields.
 
 ### Styling
-Inline styles using Mattermost theme colors (passed as props). No CSS files — all styles are in-component. CSS class names are added to elements for future external customization.
+Inline styles only (no CSS files); CSS class names are added to elements for future external customization.
+- Sidebar components take the `theme` prop (Mattermost theme object) and style from it.
+- System Console components (`components/admin/`) receive no theme; they use the Compass CSS variables (e.g. `var(--center-channel-color)`, `rgba(var(--center-channel-color-rgb), 0.72)`, `--dnd-indicator`/`--away-indicator`/`--online-indicator`) and standard classes (`btn btn-primary`, `btn-tertiary`, `btn-danger`, `icon icon-*`). The sidebar's no-access state uses them too.
+- New components should prefer Compass tokens over the theme object.
 
 ### i18n
 Strings live in `webapp/i18n/en.json`. The i18n setup is scaffolded but not fully wired; new user-visible strings should be added here.
@@ -215,7 +250,7 @@ cd webapp && npm run test-ci  # single run with coverage
 - Schedule timeline window is **48 hours** from now (not 7 days)
 
 ### TypeScript / React
-- Props include `theme` (Mattermost theme object) for consistent styling
+- Sidebar components take the `theme` prop; System Console components get no theme and use Compass CSS variables and classes; new components should prefer Compass tokens
 - Components use functional React with hooks
 - No global state management — sidebar navigation is local state in `sidebar.tsx`
 - All API calls go through `webapp/src/client/client.ts`; never call `fetch` directly in components
@@ -260,7 +295,7 @@ dist/
 
 ## Dependency Notes
 
-- **github.com/mattermost/mattermost/server/public v0.1.10** — Mattermost plugin API
+- **github.com/mattermost/mattermost/server/public v0.4.4** — Mattermost plugin API
 - **github.com/gorilla/mux v1.8.1** — HTTP routing
 - **github.com/pkg/errors v0.9.1** — error wrapping
 - **@mattermost/client / @mattermost/types 10.8.0** — Mattermost frontend types

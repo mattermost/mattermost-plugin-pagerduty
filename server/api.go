@@ -18,8 +18,27 @@ func (p *Plugin) initRouter() *mux.Router {
 	router.HandleFunc("/api/v1/webhook", p.handlePagerDutyWebhook).Methods(http.MethodPost)
 
 	// All other routes require Mattermost auth
-	authRouter := router.PathPrefix("/api/v1").Subrouter()
-	authRouter.Use(p.MattermostAuthorizationRequired)
+	baseRouter := router.PathPrefix("/api/v1").Subrouter()
+	baseRouter.Use(p.MattermostAuthorizationRequired)
+
+	// Access check for the webapp: authenticated only, never ABAC-gated.
+	baseRouter.HandleFunc("/access", p.handleGetAccess).Methods(http.MethodGet)
+
+	// Access policy administration: system admins only, never ABAC-gated so that an admin
+	// can always fix a rule that locks them out.
+	adminRouter := baseRouter.PathPrefix("/admin/access-policy").Subrouter()
+	adminRouter.Use(p.SystemAdminRequired)
+	adminRouter.HandleFunc("", p.handleGetAccessPolicy).Methods(http.MethodGet)
+	adminRouter.HandleFunc("", p.handleSaveAccessPolicy).Methods(http.MethodPut)
+	adminRouter.HandleFunc("", p.handleDeleteAccessPolicy).Methods(http.MethodDelete)
+	adminRouter.HandleFunc("/check", p.handleCheckAccessExpression).Methods(http.MethodPost)
+	adminRouter.HandleFunc("/visual-ast", p.handleAccessVisualAST).Methods(http.MethodPost)
+	adminRouter.HandleFunc("/fields", p.handleAccessFields).Methods(http.MethodGet)
+	adminRouter.HandleFunc("/test-users", p.handleAccessTestUsers).Methods(http.MethodPost)
+
+	// Every other authenticated route is gated by the ABAC policy.
+	authRouter := baseRouter.NewRoute().Subrouter()
+	authRouter.Use(p.AccessControlRequired)
 
 	// OAuth endpoints
 	authRouter.HandleFunc("/oauth/connect", p.handleOAuthConnect).Methods(http.MethodGet)

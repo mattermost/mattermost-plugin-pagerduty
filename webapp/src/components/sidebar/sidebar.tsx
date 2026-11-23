@@ -52,6 +52,9 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     // Connection state: null = checking, true = connected, false = not connected
     const [connected, setConnected] = useState<boolean | null>(null);
 
+    // Set when the server refuses the user (ABAC rule excludes them from the plugin)
+    const [accessDenied, setAccessDenied] = useState(false);
+
     // Tab state
     const [activeTab, setActiveTab] = useState<TabName>('oncall');
 
@@ -101,9 +104,14 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
     const checkConnection = useCallback(async () => {
         try {
             const status = await client.getConnectionStatus();
+            setAccessDenied(false);
             setConnected(status.connected);
             return status.connected;
-        } catch {
+        } catch (err) {
+            // Duck-typed (not instanceof) so it also works when ClientError is mocked.
+            if ((err as {status?: number} | null)?.status === 403) {
+                setAccessDenied(true);
+            }
             setConnected(false);
             return false;
         }
@@ -527,6 +535,47 @@ const PagerDutySidebar: React.FC<Props> = ({theme}) => {
                     }`}
                 </style>
                 <p style={{color: theme.centerChannelColor, opacity: 0.6}}>{'Loading...'}</p>
+            </div>
+        );
+    }
+
+    // Access denied by the plugin's access rule — nothing else is usable.
+    // Styled with Compass CSS variables rather than the theme prop (see CLAUDE.md).
+    if (accessDenied) {
+        return (
+            <div
+                className='pagerduty-sidebar pagerduty-no-access'
+                style={{height: '100%', display: 'flex', flexDirection: 'column'}}
+            >
+                <div
+                    style={{
+                        padding: '12px 16px',
+                        borderBottom: '1px solid rgba(var(--center-channel-color-rgb), 0.12)',
+                    }}
+                >
+                    <h3 style={{margin: 0, color: 'var(--center-channel-color)', fontSize: '16px'}}>
+                        {'PagerDuty'}
+                    </h3>
+                </div>
+                <div
+                    role='alert'
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '32px 24px',
+                        textAlign: 'center',
+                    }}
+                >
+                    <h4 style={{color: 'var(--center-channel-color)', margin: '0 0 8px 0', fontSize: '16px'}}>
+                        {'You don\'t have access to the PagerDuty plugin'}
+                    </h4>
+                    <p style={{color: 'rgba(var(--center-channel-color-rgb), 0.72)', fontSize: '13px', margin: 0, lineHeight: 1.5}}>
+                        {'A system administrator has restricted this plugin to specific users. Contact your administrator if you think this is a mistake.'}
+                    </p>
+                </div>
             </div>
         );
     }

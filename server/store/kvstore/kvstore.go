@@ -115,4 +115,10 @@ type KVStore interface {
 	// Reminder tracking
 	GetReminderRecord() (*ReminderRecord, error)
 	SetReminderRecord(record *ReminderRecord) error
+
+	// Access control resource ID (ABAC)
+	GetAccessResourceID() (string, error)
+	// CreateAccessResourceID stores id only if no ID exists yet. It returns true when id was
+	// written and false when another writer won the race.
+	CreateAccessResourceID(id string) (bool, error)
 }

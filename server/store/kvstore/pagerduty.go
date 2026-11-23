@@ -278,3 +278,24 @@ func (kv Client) SetReminderRecord(record *ReminderRecord) error {
 	}
 	return nil
 }
+
+const accessResourceIDKey = "pagerduty_access_resource_id"
+
+// GetAccessResourceID returns the stable ID used for the plugin's access control
+// resource and policy, or "" when none has been created yet.
+func (kv Client) GetAccessResourceID() (string, error) {
+	var id string
+	if err := kv.client.KV.Get(accessResourceIDKey, &id); err != nil {
+		return "", errors.Wrap(err, "failed to get access resource ID")
+	}
+	return id, nil
+}
+
+// CreateAccessResourceID atomically stores id if and only if no ID is stored yet.
+func (kv Client) CreateAccessResourceID(id string) (bool, error) {
+	written, err := kv.client.KV.Set(accessResourceIDKey, id, pluginapi.SetAtomic(nil))
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create access resource ID")
+	}
+	return written, nil
+}

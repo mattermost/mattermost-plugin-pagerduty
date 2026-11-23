@@ -282,6 +282,48 @@ export interface WebhookStatus {
     created_at?: string;
 }
 
+// --- Access Policy (ABAC) ---
+
+export interface AccessResponse {
+    allowed: boolean;
+}
+
+export interface AccessPolicyState {
+    available: boolean;
+    unavailable_reason: string;
+    has_policy: boolean;
+
+    // True when the server could not read whether a rule is stored because ABAC is unavailable.
+    policy_unknown: boolean;
+    expression: string;
+}
+
+export interface AccessPolicyExpressionError {
+    line: number;
+    column: number;
+    message: string;
+}
+
+export interface AccessPolicyCheckResponse {
+    errors: AccessPolicyExpressionError[] | null;
+}
+
+// Mattermost PropertyField, reduced to what the editors read.
+export interface AccessPolicyField {
+    id: string;
+    name: string;
+    type?: string;
+    object_type?: string;
+    group_id?: string;
+    attrs?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+export interface AccessPolicyTestUsersResponse {
+    users: Array<Record<string, unknown>>;
+    total: number;
+}
+
 // --- Event Types ---
 
 export const EVENT_TYPES = {

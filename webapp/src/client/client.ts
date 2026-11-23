@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 
 import manifest from '@/manifest';
-import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus, BulkOverrideResponse, BulkOverridePreviewResponse} from '@/types/pagerduty';
+import type {ConnectionStatus, IncidentFilters, ChannelSubscription, UserNotificationPrefs, WebhookStatus, BulkOverrideResponse, BulkOverridePreviewResponse, AccessResponse, AccessPolicyState, AccessPolicyCheckResponse, AccessPolicyField, AccessPolicyTestUsersResponse} from '@/types/pagerduty';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -242,6 +242,67 @@ export class Client {
 
     async getWebhookStatus(): Promise<WebhookStatus> {
         const response = await this.doFetch(`${this.baseUrl}/webhook/status`);
+        return response.json();
+    }
+
+    // --- Access Control (ABAC) ---
+
+    async getAccess(): Promise<AccessResponse> {
+        const response = await this.doFetch(`${this.baseUrl}/access`);
+        return response.json();
+    }
+
+    // Admin-only routes. They proxy Mattermost's plugin ABAC API; the server
+    // answers 403 to non-admins.
+
+    async getAccessPolicy(): Promise<AccessPolicyState> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy`);
+        return response.json();
+    }
+
+    async saveAccessPolicy(expression: string): Promise<AccessPolicyState> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy`, {
+            method: 'PUT',
+            body: JSON.stringify({expression}),
+        });
+        return response.json();
+    }
+
+    async deleteAccessPolicy(): Promise<AccessPolicyState> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy`, {
+            method: 'DELETE',
+        });
+        return response.json();
+    }
+
+    async checkAccessPolicyExpression(expression: string): Promise<AccessPolicyCheckResponse> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy/check`, {
+            method: 'POST',
+            body: JSON.stringify({expression}),
+        });
+        return response.json();
+    }
+
+    // Returns Mattermost's VisualExpression JSON, as used by the table editor.
+    async getAccessPolicyVisualAST(expression: string): Promise<unknown> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy/visual-ast`, {
+            method: 'POST',
+            body: JSON.stringify({expression}),
+        });
+        return response.json();
+    }
+
+    async getAccessPolicyFields(after = '', limit = 100): Promise<AccessPolicyField[]> {
+        const params = new URLSearchParams({after, limit: String(limit)});
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy/fields?${params.toString()}`);
+        return response.json();
+    }
+
+    async searchAccessPolicyTestUsers(expression: string, term: string, after: string, limit: number): Promise<AccessPolicyTestUsersResponse> {
+        const response = await this.doFetch(`${this.baseUrl}/admin/access-policy/test-users`, {
+            method: 'POST',
+            body: JSON.stringify({expression, term, after, limit}),
+        });
         return response.json();
     }
 }

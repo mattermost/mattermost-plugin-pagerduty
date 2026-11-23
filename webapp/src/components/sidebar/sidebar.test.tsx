@@ -131,6 +131,28 @@ describe('PagerDutySidebar', () => {
         expect(screen.getByText('Loading...')).toBeInTheDocument();
     });
 
+    it('should show a no-access state instead of the connect screen on 403', async () => {
+        mockClient.getConnectionStatus.mockRejectedValueOnce(Object.assign(new Error('forbidden'), {status: 403}));
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText("You don't have access to the PagerDuty plugin")).toBeInTheDocument();
+        });
+        expect(screen.queryByRole('button', {name: 'Connect to PagerDuty'})).not.toBeInTheDocument();
+    });
+
+    it('should still show the connect screen on other errors', async () => {
+        mockClient.getConnectionStatus.mockRejectedValueOnce(Object.assign(new Error('boom'), {status: 500}));
+
+        render(<PagerDutySidebar theme={mockTheme}/>);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: 'Connect to PagerDuty'})).toBeInTheDocument();
+        });
+        expect(screen.queryByText("You don't have access to the PagerDuty plugin")).not.toBeInTheDocument();
+    });
+
     it('should show connect screen when not connected', async () => {
         mockClient.getConnectionStatus.mockResolvedValueOnce({connected: false});
 
